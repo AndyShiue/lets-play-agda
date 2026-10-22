@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Let's play Agda — editor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+  <!-- Which service worker makes this page cross-origin isolated (see bootstrap.js) -->
+  <meta name="lpa-sw" content="__SW_URL__" data-scope="__SW_SCOPE__">
+
+  <!-- Read by the VS Code workbench (same elements the official web page template has) -->
+  <meta id="vscode-workbench-builtin-extensions" data-settings="[]">
+  <link rel="icon" href="vscode/favicon.ico" type="image/x-icon">
+  <link data-name="vs/workbench/workbench.web.main" rel="stylesheet" href="vscode/out/vs/workbench/workbench.web.main.internal.css">
+  <style id="vscode-css-modules" type="text/css" media="screen"></style>
+  <script>
+    // match the loading screen to the page that embeds the editor
+    if (new URLSearchParams(location.search).get('theme') === 'dark') {
+      document.documentElement.style.background = '#1f1f1f';
+      document.documentElement.style.colorScheme = 'dark';
+    }
+  </script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #lpa-status { font: 16px/1.5 system-ui, sans-serif; padding: 2rem; color: #888; }
+    #lpa-status.error { color: #b00020; white-space: pre-wrap; }
+  </style>
+</head>
+<body aria-label="">
+  <div id="lpa-status">Loading the editor…</div>
+  <noscript>This editor needs JavaScript.</noscript>
+  <script type="module" src="bootstrap.js"></script>
+</body>
+</html>

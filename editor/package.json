@@ -1,0 +1,18 @@
+{
+  "name": "lets-play-agda-editor",
+  "private": true,
+  "type": "module",
+  "description": "Static, self-hosted VS Code for the Web with Agda (WASM). A service worker adds COOP/COEP (cross-origin isolation) and caches everything.",
+  "scripts": {
+    "fetch": "node scripts/fetch-inputs.mjs",
+    "build": "node scripts/build-site.mjs",
+    "serve": "node scripts/serve.mjs",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

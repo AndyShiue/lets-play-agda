@@ -1,0 +1,20 @@
+{
+  "name": "lets-play-agda-site",
+  "private": true,
+  "type": "module",
+  "description": "Static tutorial site generated from the literate Agda sources, with an embedded in-browser Agda editor. No dependencies.",
+  "scripts": {
+    "build": "node scripts/build-all.mjs",
+    "build:pages": "node scripts/build.mjs",
+    "test": "node --test scripts/test-exercises.mjs",
+    "check": "node scripts/check.mjs",
+    "serve": "node ../editor/scripts/serve.mjs --dir dist --base /lets-play-agda/ --port 8080",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

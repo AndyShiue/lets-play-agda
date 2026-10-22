@@ -1,0 +1,115 @@
+# Builds the tutorial site (site/) with the embedded editor (editor/) and
+# publishes it to GitHub Pages. No Nix.
+#
+# NOT RUN YET: written from the build scripts' documentation and the pinned
+# VS Code sources, but this workflow has not been executed on GitHub.
+# Before relying on it: repository Settings -> Pages -> Source: "GitHub Actions".
+#
+# VS Code for the Web is built from the MIT-licensed sources of
+# microsoft/vscode (pinned commit below), not taken from Microsoft's binary
+# distribution, whose license does not allow publishing it.
+
+name: Build and deploy the site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  # VS Code 1.143.0 (stable). Keep in sync with editor/scripts/fetch-inputs.mjs.
+  VSCODE_COMMIT: 2d0b7506a36c1d6db9a466440131a8e01eab2289
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      # ---- VS Code for the Web, from source (cached: unchanged until the pin moves)
+      - name: Restore VS Code for the Web
+        id: vscode-cache
+        uses: actions/cache@v6
+        with:
+          path: vscode-web
+          key: vscode-web-${{ env.VSCODE_COMMIT }}-1
+
+      - name: Check out VS Code
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: microsoft/vscode
+          ref: ${{ env.VSCODE_COMMIT }}
+          path: vscode
+          fetch-depth: 1
+
+      # VS Code (at the pinned commit its .nvmrc says 24.18.0) accepts that version
+      # or newer with the same major version; the site needs Node 20 or newer.
+      - name: Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: System packages for VS Code's native modules
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
+
+      - name: Install VS Code's dependencies
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        working-directory: vscode
+        run: npm ci
+
+      - name: Build VS Code for the Web
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        working-directory: vscode
+        # writes ../vscode-web (next to the vscode/ checkout)
+        run: npm run gulp vscode-web-min
+
+      - name: Keep VS Code's license notices with the build
+        if: steps.vscode-cache.outputs.cache-hit != 'true'
+        run: cp vscode/LICENSE.txt vscode/ThirdPartyNotices.txt vscode-web/
+
+      # ---- the site
+      - name: Fetch the Agda extensions and the cubical library
+        run: node editor/scripts/fetch-inputs.mjs --only ext --only cubical
+
+      - name: Build the site
+        run: node site/scripts/build-all.mjs --vscode vscode-web --strict
+
+      - name: Check the generated pages
+        run: node site/scripts/check.mjs
+
+      # Not a gate yet (see the note at the top): runs the browser test in Chrome.
+      - name: End-to-end test
+        continue-on-error: true
+        working-directory: site
+        env:
+          E2E_CHANNEL: chrome
+        run: |
+          npm install --no-audit --no-fund
+          node scripts/e2e.mjs
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

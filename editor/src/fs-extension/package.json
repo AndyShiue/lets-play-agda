@@ -1,0 +1,17 @@
+{
+  "name": "workspace-fs",
+  "displayName": "Let's play Agda workspace",
+  "description": "Serves the tutorial's files (read from the static site) as the lpa: file system, with in-memory edits.",
+  "publisher": "lets-play-agda",
+  "version": "0.0.1",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onFileSystem:lpa"
+  ],
+  "browser": "./extension.js",
+  "contributes": {}
+}

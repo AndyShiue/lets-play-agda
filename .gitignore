@@ -1,8 +1,5 @@
 *.agdai
-cache
-out
-out-wip
 *~
 \#*#
 .\#*
-COMMIT_ID
+node_modules/

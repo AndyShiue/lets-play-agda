@@ -1,5 +1,23 @@
 # About this project
 
+## About this version
+
+This is a static rebuild of *Let's play Agda*, the interactive Agda tutorial
+created by [Ingo Blechschmidt](https://www.ingo-blechschmidt.eu/) (University of
+Antwerp) for a 2025 course at the [University of
+Padova](https://www.unipd.it/en/dm) organized by [Milly
+Maietti](https://www.math.unipd.it/~maietti/); see the [original
+site](https://lets-play-agda.quasicoherent.io/) and the [original
+repository](https://github.com/iblech/lets-play-agda). The text and the Agda
+code of the tutorial are the work of the original author and of the
+contributors named below, and are available under the
+[CC BY-SA](https://creativecommons.org/licenses/by-sa/4.0/) license. This
+version shows them as a static website whose Agda editor runs in your browser
+([source code of this version](https://github.com/AndyShiue/lets-play-agda)).
+The sections below describing this site's technology have been updated for
+this version; the credits are those of the original.
+
+
 ## Credits
 
 Over the years, the structure and contents of this course have been shaped by
@@ -62,19 +80,16 @@ appreciated:
 
 This interactive Agda tutorial builds on awesome free software projects:
 
-<div class="logos">
-<a href="https://www.linux.org/"><img src="images/linux.svg" alt="Linux"></a>
-<a href="https://www.gnu.org/"><img src="images/gnu.svg" alt="GNU"></a>
-<a href="https://perl.org/"><img src="images/perl.svg" alt="Perl"></a>
-<a href="https://nixos.org/"><img src="images/nixos.svg" alt="NixOS"></a>
-<a href="https://nginx.org/"><img src="images/nginx.svg" alt="nginx"></a>
-<a href="https://xtermjs.org/"><img src="images/xtermjs.svg" alt="xterm.js"></a>
-<a href="https://github.com/tsl0922/ttyd"><img src="images/ttyd.svg" alt="ttyd"></a>
-<a href="https://github.com/containers/bubblewrap"><img src="images/bubblewrap.svg" alt="bubblewrap"></a>
-</div>
+- [Agda](https://agda.readthedocs.io/) itself, which runs in your browser as
+  WebAssembly thanks to the [Agda Web](https://agda-web.github.io/) project
+  and the [Agda Language Server](https://github.com/agda/agda-language-server),
+- [Visual Studio Code for the Web](https://github.com/microsoft/vscode) (Code - OSS),
+- [agda-mode for VS Code](https://github.com/banacorn/agda-mode-vscode) by
+  Ting-Gian Lua, and the
+  [ALS WASM Loader](https://github.com/qbane/vscode-als-wasm-loader) by Andy Pan,
+- the [cubical library](https://github.com/agda/cubical).
 
-The [confetti animation](javascript:showConfetti()) is by
-[Elias Ruiz Monserrat](https://gist.github.com/elrumo/3055a9163fd2d0d19f323db744b0a094).
+Press [here](javascript:showConfetti()) for a confetti animation.
 
 
 ### Similar projects for other languages
@@ -90,16 +105,16 @@ The [confetti animation](javascript:showConfetti()) is by
 In case you prefer to work with a local Agda installation, there is an
 [archive](Padova2025.zip) of all Agda code.
 
-[It is also possible to self-host Let's play Agda.](https://github.com/iblech/lets-play-agda/)
+This tutorial is a static website; [its repository](https://github.com/AndyShiue/lets-play-agda)
+contains everything needed to build and host it yourself.
 
 
 ## Backing up your data
 
-- For the interactive Agda elements of this project, you are connected to an
-  container including Agda running on a server of mine. This container is ephemeral,
-  your Agda code is not permanently stored on the server.
+- The interactive Agda elements of this project run in your browser. There is
+  no server involved, and your Agda code never leaves your computer.
 
-- Instead, your solutions to Agda exercises are only stored in your browser's local
+- Your solutions to Agda exercises are stored in your browser's local
   storage. This storage is in principle permanent but in practice prone to be
   cleared, for instance when working in your browser's private mode or when
   deleting "application data" of web sites. Hence you might want to
