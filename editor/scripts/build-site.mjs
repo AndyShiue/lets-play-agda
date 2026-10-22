@@ -152,8 +152,12 @@ copy(path.join(repoRoot, 'Padova2025'), path.join(ws, 'Padova2025'), (r) => !r.e
 fs.copyFileSync(path.join(repoRoot, 'padova2025.agda-lib'), path.join(ws, 'padova2025.agda-lib'));
 copy(inputs.cubical, path.join(ws, 'cubical'), (r) =>
   r === '' || r === 'cubical.agda-lib' || r === 'LICENSE' || r === 'Cubical' || (r.startsWith('Cubical/') && !r.endsWith('.agdai')));
-fs.mkdirSync(path.join(ws, '.vscode'), { recursive: true });
-fs.writeFileSync(path.join(ws, '.vscode', 'settings.json'), JSON.stringify({
+// The workspace's settings. They must NOT be a file under a hidden directory
+// (workspace/.vscode/settings.json): GitHub's upload-pages-artifact leaves hidden
+// files out, and without this setting Agda cannot find the cubical library. So it
+// is a plain file next to the manifest, and the file system extension presents it
+// to VS Code as /.vscode/settings.json.
+fs.writeFileSync(path.join(out, 'workspace-settings.json'), JSON.stringify({
   'alsWasmLoader.libraryFilePaths': ['cubical/cubical.agda-lib'],
   // The tutorial's own modules and the library are needed by Agda, but are not
   // for browsing (they contain the solutions); exercises live in Exercise/.
@@ -177,6 +181,7 @@ for (const f of ['sw-common.js', 'sw.js', 'webview-sw.js', 'bootstrap.js', 'inde
 hash.update(exerciseLib);
 hash.update(fs.readFileSync(path.join(root, 'src', 'fs-extension', 'extension.js')));
 hash.update(fs.readFileSync(path.join(out, 'workspace-manifest.json')));
+hash.update(fs.readFileSync(path.join(out, 'workspace-settings.json')));
 const versionFile = path.join(vscodeOut, 'version');
 if (fs.existsSync(versionFile)) hash.update(fs.readFileSync(versionFile));
 const buildId = option('build-id', process.env.GITHUB_SHA?.slice(0, 12) ?? hash.digest('hex').slice(0, 12));
@@ -260,7 +265,7 @@ const precache = [
   'extensions/als-wasm-loader/vscode-wasm/wasm-wasi-core/dist/web/threadWorker.js',
   'extensions/lets-play-agda-fs/package.json',
   'extensions/lets-play-agda-fs/extension.js',
-  'workspace/.vscode/settings.json',
+  'workspace-settings.json',
 ].filter((p) => p === './' || fs.existsSync(path.join(out, p)));
 
 if (ownSw) {

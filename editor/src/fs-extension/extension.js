@@ -5,7 +5,8 @@
  *
  *  1. File system provider for the `lpa:` scheme. The files of the tutorial are
  *     static files of the site (../../workspace, listed in
- *     ../../workspace-manifest.json); edits are kept in memory.
+ *     ../../workspace-manifest.json); edits are kept in memory. The workspace's
+ *     settings come from ../../workspace-settings.json.
  *  2. Exercises. For an exercise of a tutorial page it builds the file the
  *     reader edits (see exercises.cjs), under Exercise/…, restores the reader's
  *     earlier work from IndexedDB, opens it and asks agda-mode to load it.
@@ -105,9 +106,10 @@ class WorkspaceFileSystem {
    * @param {vscode.Uri} filesBase  where the static files live
    * @param {vscode.Uri} manifestUri
    */
-  constructor(filesBase, manifestUri) {
+  constructor(filesBase, manifestUri, settingsUri) {
     this.filesBase = filesBase;
     this.manifestUri = manifestUri;
+    this.settingsUri = settingsUri;
     this._emitter = new vscode.EventEmitter();
     this.onDidChangeFile = this._emitter.event;
     /** @type {Map<string, {type: number, size: number, mtime: number, src?: string, data?: Uint8Array, exercise?: {key: string}}>} */
@@ -129,6 +131,17 @@ class WorkspaceFileSystem {
       this._ensureDirectory(parentOf(path), now);
       this._setNode(path, { type: FILE, size, mtime: now, src: relative });
     }
+
+    // The workspace's settings (where Agda finds the cubical library, ...). They are
+    // served as a plain file and shown as /.vscode/settings.json, because hidden
+    // files do not survive every way of publishing the site (GitHub's
+    // upload-pages-artifact drops them). Without them Agda fails with
+    // "Library 'cubical' not found", so a failure here must be loud.
+    const settings = await fetch(this.settingsUri.toString(true));
+    if (!settings.ok) throw new Error(`Could not load ${this.settingsUri}: ${settings.status}`);
+    const data = new Uint8Array(await settings.arrayBuffer());
+    this._ensureDirectory('/.vscode', now);
+    this._setNode('/.vscode/settings.json', { type: FILE, size: data.byteLength, mtime: now, data });
   }
 
   _ensureDirectory(path, mtime) {
@@ -272,10 +285,11 @@ class WorkspaceFileSystem {
 // exercises and the bridge to the page
 // ---------------------------------------------------------------------------
 function activate(context) {
-  // <site>/extensions/lets-play-agda-fs  ->  <site>/workspace and <site>/workspace-manifest.json
+  // <site>/extensions/lets-play-agda-fs  ->  <site>/workspace, workspace-manifest.json, workspace-settings.json
   const filesBase = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'workspace');
   const manifestUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'workspace-manifest.json');
-  const fileSystem = new WorkspaceFileSystem(filesBase, manifestUri);
+  const settingsUri = vscode.Uri.joinPath(context.extensionUri, '..', '..', 'workspace-settings.json');
+  const fileSystem = new WorkspaceFileSystem(filesBase, manifestUri, settingsUri);
   context.subscriptions.push(vscode.workspace.registerFileSystemProvider('lpa', fileSystem, { isCaseSensitive: true }));
 
   const channel = new BroadcastChannel('lpa-editor');

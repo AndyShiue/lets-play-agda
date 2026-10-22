@@ -129,6 +129,16 @@ worker's own update check. Not tested: Safari, Firefox, mobile, real GitHub Page
   content is CC BY-SA; the code in this directory is AGPL-3.0-or-later like the
   rest of the frontend.
 
+## Hidden files do not survive publishing
+
+GitHub's `actions/upload-pages-artifact` leaves out hidden files (names starting
+with a dot). The editor once depended on `workspace/.vscode/settings.json` (it tells
+Agda where the cubical library is); on the published site that file was a 404 and
+every exercise failed with `Library 'cubical' not found`. The settings are now a
+plain file, `workspace-settings.json`, which the file system extension presents to
+VS Code as `/.vscode/settings.json`, and `site/scripts/check.mjs` fails the build
+if the site contains a hidden file of ours.
+
 ## Known gaps / TODO
 
 * Edits to ordinary files live in memory only (`extensions/lets-play-agda-fs`);

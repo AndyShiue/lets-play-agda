@@ -42,6 +42,21 @@ for (const file of fs.readdirSync(dist).filter((f) => f.endsWith('.html') && f !
   if (duplicates.length) report('duplicate ids', duplicates.join(', '));
 }
 
+// GitHub's upload-pages-artifact leaves hidden files (names starting with a dot) out
+// of the deployment, so nothing the site needs may be one. Third-party trees
+// (the VS Code build and the extensions) are not ours to police.
+(function scan(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    const relative = path.relative(dist, full).split(path.sep).join('/');
+    if (relative === 'editor/vscode' || relative === 'editor/extensions') continue;
+    if (entry.name.startsWith('.') && entry.name !== '.nojekyll') {
+      problems.push(`hidden file or directory, not published by upload-pages-artifact: ${relative}`);
+    }
+    if (entry.isDirectory()) scan(full);
+  }
+})(dist);
+
 console.log(problems.length ? problems.join('\n') : 'no problems found');
 console.log(`${problems.length} problem(s)`);
 process.exit(problems.length ? 1 : 0);
