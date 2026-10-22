@@ -229,6 +229,34 @@ try {
   check('reopening the exercise restores the reader\'s code', /idBool x = x/.test(await editorText(page)));
   const again = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('Agda checks the restored file: All Done', /All Done/.test(again), again.slice(0, 80));
+  await page.close();
+
+  // ---- 4b. a new deployment reaches a returning visitor --------------------
+  // Simulated by changing the files of dist/ the way a new build would: a new build id
+  // (the name of the worker's caches) and a changed file of the editor.
+  log('--- 4b. a new deployment');
+  const dist = (f) => path.join(root, 'dist', f);
+  const MARKER = 'lpa-e2e-new-deployment';
+  fs.appendFileSync(dist('editor/extensions/lets-play-agda-fs/extension.js'), `\n// ${MARKER}\n`);
+  for (const f of [dist('sw-common.js'), dist('editor/vscode/out/vs/workbench/contrib/webview/browser/pre/sw-common.js')]) {
+    fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/(CACHE_PREFIX \+ '(?:site-)?)[0-9a-f]{12}/, '$1e2e0update00'));
+  }
+  page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
+  await page.goto(PAGE);
+  await page.waitForSelector('#exercise-1', { timeout: 30000 });
+  const gotNew = await waitFor('the new version',
+    () => page.evaluate(async (m) => (await (await fetch('editor/extensions/lets-play-agda-fs/extension.js')).text()).includes(m), MARKER), 60).then(() => true, () => false);
+  check('a returning visitor gets the new version without closing every tab', gotNew);
+  // the site's own files are cached per build, so the editor refills that cache once, online
+  await openExercise(page);
+  await waitFor('exercise file', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
+  const afterUpdate = await waitAgda(page, /All Done|All Goals|Error/, 240);
+  check('the editor works after the update', /All Done/.test(afterUpdate), afterUpdate.slice(0, 80));
+  // by now both workers (the site's and the webview's) are the new ones
+  const cacheNames = await page.evaluate(() => caches.keys()).catch(() => []);
+  check('old caches are removed, the (unchanged) VS Code files stay cached',
+    cacheNames.some((n) => n.startsWith('lpa-static-')) && cacheNames.filter((n) => n.startsWith('lpa-site-')).length === 1, cacheNames.join(', '));
 
   // ---- 5. offline ---------------------------------------------------------
   log('--- 5. server stopped');

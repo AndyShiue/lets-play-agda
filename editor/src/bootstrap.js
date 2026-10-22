@@ -49,7 +49,7 @@ async function ensureIsolation() {
   }
 
   say('Preparing the editor (first visit only)…');
-  const registration = await navigator.serviceWorker.register(swUrl, { scope: swScope });
+  const registration = await navigator.serviceWorker.register(swUrl, { scope: swScope, updateViaCache: 'none' });
   await navigator.serviceWorker.ready;
   if (!navigator.serviceWorker.controller) {
     await new Promise((resolve) => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));

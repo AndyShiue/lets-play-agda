@@ -18,13 +18,24 @@
  * Microsoft hosts (telemetry/experiments) locally, and caches the few
  * cross-origin files we still depend on.
  *
- * The build id in CACHE_NAME below is filled in by scripts/build-site.mjs.
+ * Two caches:
+ *   - the site's own files (pages, scripts, our extension, the workspace) are
+ *     named after the build id: every deployment starts a fresh one;
+ *   - the VS Code build and the other files that never change for the same
+ *     identity (the WebAssembly download) are named after that identity, so a
+ *     deployment that does not touch VS Code does not make readers download
+ *     its ~60 MB again.
+ * The two ids in the names below are filled in by the build scripts.
  */
 (function (g) {
   'use strict';
 
-  const CACHE_PREFIX = 'lpa-editor-';
-  const CACHE_NAME = CACHE_PREFIX + '__BUILD_ID__';
+  const CACHE_PREFIX = 'lpa-';
+  const SITE_CACHE = CACHE_PREFIX + 'site-__BUILD_ID__';
+  const STATIC_CACHE = CACHE_PREFIX + 'static-__STATIC_ID__';
+  const CACHE_NAMES = [SITE_CACHE, STATIC_CACHE];
+
+  const cacheNameFor = (url) => (url.pathname.includes('/editor/vscode/') ? STATIC_CACHE : SITE_CACHE);
 
   // Hosts the stock VS Code web build talks to; we never want that traffic.
   const STUB_HOSTS = new Set(['main.vscode-cdn.net', 'default.exp-tas.com']);
@@ -69,8 +80,20 @@
       : request;
   }
 
+  // What the worker fetches from the network must not come out of the browser's
+  // HTTP cache: GitHub Pages lets files live there for 10 minutes, so right after a
+  // deployment a new worker would be handed (and store) the previous files. 'no-cache'
+  // revalidates with the server (a 304 costs next to nothing).
+  function fromNetwork(request) {
+    if (request.mode === 'navigate') {
+      // a navigation cannot be re-issued with another cache mode, only copied
+      return new Request(request.url, { cache: 'no-cache', credentials: 'same-origin', redirect: request.redirect, headers: request.headers });
+    }
+    return new Request(request, { cache: 'no-cache' });
+  }
+
   async function sameOrigin(request, url) {
-    const cache = await caches.open(CACHE_NAME);
+    const cache = await caches.open(cacheNameFor(url));
     const key = cacheKey(request, url);
     // Only the top-level page is network-first (so that a new deployment is
     // noticed); everything else, iframes included, is cache-first.
@@ -82,7 +105,7 @@
     }
 
     try {
-      const net = await fetch(request);
+      const net = await fetch(fromNetwork(request));
       if (net.status === 200 && net.type === 'basic') {
         cache.put(key, net.clone()).catch(() => {});
       }
@@ -95,7 +118,8 @@
   }
 
   async function cachedExternal(request) {
-    const cache = await caches.open(CACHE_NAME);
+    // the URLs are pinned to a version: they never change
+    const cache = await caches.open(STATIC_CACHE);
     const hit = await cache.match(request.url);
     if (hit) return hit;
     const net = await fetch(request);
@@ -119,5 +143,5 @@
     }
   }
 
-  g.lpa = { CACHE_PREFIX, CACHE_NAME, onFetch };
+  g.lpa = { CACHE_PREFIX, SITE_CACHE, STATIC_CACHE, CACHE_NAMES, onFetch };
 })(self);

@@ -16,3 +16,14 @@ import './service-worker-orig.js';
 import './sw-common.js';
 
 self.addEventListener('fetch', self.lpa.onFetch);
+
+// Like the site's worker: when a new build's wrapper takes over, drop the caches of
+// older builds (a wrapper that is still the old one may have re-created its own).
+self.addEventListener('activate', (event) => {
+  const { CACHE_PREFIX, CACHE_NAMES } = self.lpa;
+  event.waitUntil((async () => {
+    for (const key of await caches.keys()) {
+      if (key.startsWith(CACHE_PREFIX) && !CACHE_NAMES.includes(key)) await caches.delete(key);
+    }
+  })());
+});

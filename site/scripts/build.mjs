@@ -351,10 +351,16 @@ for (const mod of modules.values()) {
 const precache = ['./', ...htmlFiles, assets['app.css'], assets['app.js'], assets['search'], 'sw-common.js'];
 
 // service worker: the editor's one, with the list of this site's files
-const swCommon = fs.readFileSync(path.join(repo, 'editor', 'src', 'sw-common.js'), 'utf8').replaceAll('__BUILD_ID__', BUILD_ID);
+// the id of the worker's long-lived cache comes from the editor build (it identifies the VS Code files)
+let staticId = 'none';
+if (editorDist) {
+  try { staticId = JSON.parse(fs.readFileSync(path.join(path.resolve(process.cwd(), editorDist), 'build-info.json'), 'utf8')).staticId ?? staticId; } catch { /* keep 'none' */ }
+}
+const swCommon = fs.readFileSync(path.join(repo, 'editor', 'src', 'sw-common.js'), 'utf8').replaceAll('__BUILD_ID__', BUILD_ID).replaceAll('__STATIC_ID__', staticId);
 fs.writeFileSync(path.join(out, 'sw-common.js'), swCommon);
 fs.writeFileSync(path.join(out, 'sw.js'), fs.readFileSync(path.join(repo, 'editor', 'src', 'sw.js'), 'utf8')
   .replaceAll('__BUILD_ID__', BUILD_ID)
+  .replaceAll('__STATIC_ID__', staticId)
   .replaceAll('__PRECACHE__', () => JSON.stringify(precache, null, 2)));
 
 // The Agda files as archives, for working with a local Agda: with holes (the

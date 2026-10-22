@@ -186,7 +186,10 @@ const versionFile = path.join(vscodeOut, 'version');
 if (fs.existsSync(versionFile)) hash.update(fs.readFileSync(versionFile));
 const buildId = option('build-id', process.env.GITHUB_SHA?.slice(0, 12) ?? hash.digest('hex').slice(0, 12));
 
-const withBuildId = (text) => text.replaceAll('__BUILD_ID__', buildId);
+// The id of the long-lived cache (VS Code and the files that go with it), known
+// once our patches of the VS Code files are done.
+let staticId = '';
+const withBuildId = (text) => text.replaceAll('__BUILD_ID__', buildId).replaceAll('__STATIC_ID__', staticId);
 const read = (f) => fs.readFileSync(path.join(root, 'src', f), 'utf8');
 
 const pre = path.join(vscodeOut, 'out', 'vs', 'workbench', 'contrib', 'webview', 'browser', 'pre');
@@ -239,6 +242,15 @@ const pre = path.join(vscodeOut, 'out', 'vs', 'workbench', 'contrib', 'webview',
 // Webview service worker: keep VS Code's, wrap it.
 fs.renameSync(path.join(pre, 'service-worker.js'), path.join(pre, 'service-worker-orig.js'));
 fs.writeFileSync(path.join(pre, 'service-worker.js'), read('webview-sw.js'));
+{
+  // what the long-lived cache holds is identified by the VS Code build and our patches of it
+  const identity = crypto.createHash('sha256');
+  for (const f of [
+    path.join(vscodeOut, 'out', 'vs', 'workbench', 'workbench.web.main.internal.js'),
+    path.join(pre, 'index.html'), path.join(pre, 'service-worker.js'), path.join(pre, 'service-worker-orig.js'),
+  ]) identity.update(fs.readFileSync(f));
+  staticId = identity.digest('hex').slice(0, 12);
+}
 fs.writeFileSync(path.join(pre, 'sw-common.js'), withBuildId(read('sw-common.js')));
 
 const precache = [
@@ -291,6 +303,7 @@ if (isMicrosoftBuild) {
 // ---------------------------------------------------------------------------
 const info = {
   buildId,
+  staticId,
   precacheFiles: precache.length,
   sizes: {
     vscode: dirSize(vscodeOut),

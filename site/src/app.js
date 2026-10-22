@@ -522,7 +522,22 @@
   // service worker
   // ---------------------------------------------------------------------------
   async function registerWorker() {
-    return navigator.serviceWorker.register('sw.js', { scope: './' });
+    // updateViaCache: 'none' also fetches the scripts the worker imports (sw-common.js,
+    // which carries the build id) past the HTTP cache, so that a new build is noticed at once
+    return navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' });
+  }
+
+  // A new build's worker takes over at once (see sw.js); the files this page was
+  // loaded with may then be older than the ones it asks for next, so a reload is due.
+  function updateAvailable() {
+    if (document.visibilityState === 'hidden') { location.reload(); return; } // nobody is looking
+    if ($('.update-bar')) return;
+    const bar = Object.assign(document.createElement('div'), { className: 'update-bar', role: 'status' });
+    const text = Object.assign(document.createElement('span'), { textContent: 'A new version of this site is available.' });
+    const reload = Object.assign(document.createElement('button'), { type: 'button', className: 'btn primary', textContent: 'Reload' });
+    reload.addEventListener('click', () => location.reload());
+    bar.append(text, reload);
+    document.body.append(bar);
   }
 
   async function removeWorker() {
@@ -539,7 +554,18 @@
       setTimeout(() => { location.replace(location.pathname); }, 800);
       return;
     }
-    try { await registerWorker(); } catch (err) { console.warn('Service worker unavailable:', err); }
+    const hadWorker = !!navigator.serviceWorker.controller;
+    // a controller change on a page that already had one is an update (a first install is not)
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadWorker) updateAvailable(); });
+    try {
+      const registration = await registerWorker();
+      // a page that stays open for hours should still notice new deployments
+      const look = () => registration.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') look(); });
+      setInterval(look, 30 * 60 * 1000);
+    } catch (err) {
+      console.warn('Service worker unavailable:', err);
+    }
   }
 
   // ---------------------------------------------------------------------------

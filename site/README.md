@@ -66,6 +66,18 @@ run yet.
   the page reloads once so that the headers apply. An editor in an iframe can only
   use `SharedArrayBuffer` if the page around it is isolated too, which is why the
   worker covers the whole site.
+* **Updates.** A new deployment has a new build id. The worker checks for a new
+  `sw.js` whenever a page loads, when the tab becomes visible and every 30 minutes
+  (`updateViaCache: 'none'`, so that the imported `sw-common.js`, which carries the
+  id, is not served from the HTTP cache), installs and takes over at once
+  (`skipWaiting`), and the page offers a reload ("A new version of this site is
+  available"; a tab in the background reloads by itself). Two things matter for this to
+  work on GitHub Pages: files stay in the browser's HTTP cache for 10 minutes there, so
+  everything the worker fetches is revalidated (`cache: 'no-cache'`), otherwise a new
+  worker would store the previous deployment's files; and there are two caches: the
+  site's own files per build, and the VS Code files (about 60 MB) per VS Code identity,
+  so a deployment that leaves VS Code alone does not make readers download it again.
+  The end-to-end test simulates a deployment and checks all of this.
 * **If the service worker ever misbehaves:** open any page with `?nosw` to remove
   it and its caches.
 
