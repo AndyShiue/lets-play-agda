@@ -365,6 +365,36 @@ function activate(context) {
   context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabGroups(() => { closeEmptyGroups().catch(() => {}); }));
   closeEmptyGroups().catch(() => {});
 
+  // The reader sees the exercise as the page shows it (the text between the markers): the
+  // earlier code of the module above it and the tests below it are folded away, and a click
+  // on the fold shows them. The first line of a fold stays visible: for the code above that
+  // is the empty first line of the file (see buildExerciseFile), for the tests the END marker.
+  const FOLD_START = START.trimEnd();
+  context.subscriptions.push(vscode.languages.registerFoldingRangeProvider({ scheme: 'lpa' }, {
+    provideFoldingRanges(document) {
+      const lines = document.getText().split('\n').map((line) => line.replace(/\r$/, ''));
+      const start = lines.indexOf(FOLD_START);
+      const end = lines.indexOf(END);
+      if (start < 0 || end < start) return [];
+      const ranges = [];
+      if (start > 1) ranges.push(new vscode.FoldingRange(0, start, vscode.FoldingRangeKind.Region));
+      if (lines.slice(end + 1).some((line) => line.trim())) ranges.push(new vscode.FoldingRange(end, lines.length - 1, vscode.FoldingRangeKind.Region));
+      return ranges;
+    },
+  }));
+
+  async function foldAroundExercise(editor) {
+    const lines = editor.document.getText().split('\n');
+    if (lines.indexOf(FOLD_START) <= 1) return; // nothing above the exercise
+    const hidden = (line) => !editor.visibleRanges.some((range) => range.start.line <= line && line <= range.end.line);
+    // the editor asks the provider for the ranges a moment after the document is shown
+    for (let attempt = 0; attempt < 30; attempt++) {
+      await vscode.commands.executeCommand('editor.foldAll');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      if (editor.visibleRanges.length > 0 && hidden(1)) return;
+    }
+  }
+
   async function loadWithAgda() {
     agdaStarted = true;
     // agda-mode activates when the first Agda file is opened; its commands appear a moment later
@@ -392,6 +422,7 @@ function activate(context) {
 
       const uri = vscode.Uri.from({ scheme: 'lpa', path });
       const editor = await vscode.window.showTextDocument(uri, { preview: false });
+      await foldAroundExercise(editor);
       // show the exercise (between the markers), wherever the reader has scrolled to
       const text = editor.document.getText();
       const startMark = text.indexOf(START);

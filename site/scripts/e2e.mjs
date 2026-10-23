@@ -248,6 +248,16 @@ try {
   check('the exercise file is open (lpa:/Exercise/ProgrammingBasics/Booleans/Ex1.agda)', !!opened);
   const text = await editorText(page);
   check('it contains the exercise with a hole', /idBool/.test(text) && /\{!/.test(text), text.replace(/\s+/g, ' ').slice(0, 80));
+  // folded: what is left to see is the exercise as the page shows it, nothing above, no tests below
+  const folds = () => editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .codicon-folding-collapsed').count();
+  await waitFor('the code above and the tests below to be folded', async () => (await folds()) === 2, 30).catch(() => {});
+  await sleep(500);
+  // without whitespace: the editor wraps long lines, and the page's block has a "Copy" button
+  const norm = (s) => s.replace(/\s+/g, '');
+  const pageCode = norm(await page.locator('#exercise-1 > pre.agda').first().innerText()).replace(/Copy$/, '');
+  const editorCode = norm((await editorText(page)).replace('-- EXERCISE ENDS', ''));
+  check('the code above the exercise and the tests below it are folded', (await folds()) === 2, `${await folds()} folds`);
+  check('what the editor shows is exactly what the page shows for the exercise', editorCode === pageCode, `editor: ${editorCode.slice(0, 90)} | page: ${pageCode.slice(0, 90)}`);
   const goals = await waitAgda(page, /All Goals|Error/, 240);
   log('Agda says:', goals.slice(0, 100));
   check('Agda loads the exercise and shows 1 goal', /All Goals/.test(goals) && /\?0 : Bool/.test(goals), goals.slice(0, 100));

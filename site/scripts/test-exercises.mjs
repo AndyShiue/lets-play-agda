@@ -52,10 +52,10 @@ test('only blocks with {--} or -- Holify are exercises; ```sh and ```code blocks
   assert.deepEqual(ex.listExercises(blocks).map((e) => e.id), ['foo']);
 });
 
-test('the exercise file: earlier code blocks verbatim, then the exercise between markers', () => {
+test('the exercise file: an empty line (the fold of the code above shows it), earlier code blocks verbatim, then the exercise between markers', () => {
   const source = '```\nmodule Padova2025.Test where\n```\n\ntext\n\n```\ntarget : Set\ntarget = {--}?{--}\n```\n';
   assert.equal(exerciseFile(source),
-    'module Exercise.Test.Ex1 where\n\n-- EXERCISE STARTS\ntarget : Set\ntarget = {!!}\n-- EXERCISE ENDS\n');
+    '\nmodule Exercise.Test.Ex1 where\n\n-- EXERCISE STARTS\ntarget : Set\ntarget = {!!}\n-- EXERCISE ENDS\n');
 });
 
 test('later blocks are not part of an exercise file', () => {
@@ -65,7 +65,7 @@ test('later blocks are not part of an exercise file', () => {
 
 test('a module with parameters keeps them when its header is renamed', () => {
   const source = '```\nmodule Padova2025.Test (⊥ : Set) where\n```\n```\nx : Set\nx = {--}?{--}\n```\n';
-  assert.match(exerciseFile(source), /^module Exercise\.Test\.Ex1 \(⊥ : Set\) where/);
+  assert.match(exerciseFile(source), /^module Exercise\.Test\.Ex1 \(⊥ : Set\) where/m);
 });
 
 test('code in HTML comments is Agda but hidden, and never an exercise by itself being shown', () => {

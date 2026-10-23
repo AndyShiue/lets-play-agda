@@ -57,7 +57,11 @@ run yet.
   you press *Edit hole…*. The page and the editor talk over a `BroadcastChannel`;
   the page notices when Agda says *All Done* and records the exercise as solved.
   The reader's code is kept in the browser (IndexedDB), progress in localStorage;
-  *Download backup* / *Restore* in the sidebar export and import it.
+  *Download backup* / *Restore* in the sidebar export and import it. The file Agda
+  checks holds the module's earlier code and the exercise's tests as well; the editor
+  folds them away (a folding range provider in the editor's extension, and an empty first
+  line of the file for the upper fold to collapse into), so that what is visible is the
+  exercise exactly as the page shows it. A click on a fold shows the rest.
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a
@@ -87,6 +91,11 @@ run yet.
 ## Known gaps
 
 * The reader's edits and exercise progress live only in this browser.
+* The two marker lines around the exercise (`-- EXERCISE STARTS` / `ENDS`) are ordinary
+  text. Folded, they are mostly out of reach, but Backspace at the start of the first
+  line joins it to the first marker (the fold opens and the damage is visible), and
+  typing on the lines the cursor can step onto above and below the exercise changes
+  them. Undo repairs it.
 * Agda's type-checking runs in the browser from the sources: the first start of
   the editor downloads ~30 MB (cached afterwards), and the first load of an
   exercise type-checks the modules it imports (seconds to ~20 s for the cubical

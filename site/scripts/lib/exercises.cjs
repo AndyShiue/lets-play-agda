@@ -155,10 +155,14 @@
    * its solution when `solved`), then its tests. The module gets its own name
    * (Exercise.…) so that it never clashes with the solution module that other
    * modules import.
+   *
+   * The file starts with an empty line: the editor folds everything above the
+   * exercise, and the first line of a fold stays visible. (Likewise the tests
+   * fold into the `-- EXERCISE ENDS` line.)
    */
   function buildExerciseFile(blocks, blockIndex, moduleName, ordinal, options) {
     const solved = !!(options && options.solved);
-    let text = '';
+    let text = '\n';
     for (const b of blocks) {
       if (b.kind !== 'agda' || b.index > blockIndex) continue;
       if (b.index < blockIndex) {
