@@ -161,8 +161,9 @@ The pages of the table of contents are the modules reached from
   editor, solving an exercise, progress, offline. Opening the first and the last exercise
   of every module in the editor works. Not tested: Safari, Firefox, phones, real GitHub Pages
   and the deployment workflow.
-* The tutorial's text still mentions Emacs key bindings in a few places; `C-c C-v`
-  (a custom binding of the original setup) is `C-c C-n` in agda-mode for VS Code.
+* The tutorial's text still mentions Emacs key bindings in a few places. `C-c C-v`
+  (evaluate an expression; a custom binding of the original setup, needed because a browser
+  keeps `C-n` for a new window) works: the editor binds it to the command of agda-mode's `C-c C-n`.
 * Without Agda's own highlighting, identifiers in code are not clickable and show no type on
   hover (symbols show how to type them).
 * The first start of the editor downloads about 30 MB (cached afterwards), and Agda needs a few

@@ -13,5 +13,14 @@
     "onFileSystem:lpa"
   ],
   "browser": "./extension.js",
-  "contributes": {}
+  "contributes": {
+    "keybindings": [
+      {
+        "command": "agda-mode.compute-normal-form[DefaultCompute]",
+        "key": "ctrl+c ctrl+v",
+        "mac": "ctrl+c ctrl+v",
+        "when": "editorLangId =~ /.*(l?agda(-(markdown|typst|latex|tex|rst|org|forester))?).*/ && !editorHasSelection && editorTextFocus"
+      }
+    ]
+  }
 }

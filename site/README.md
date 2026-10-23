@@ -103,6 +103,8 @@ run yet.
   exercise type-checks the modules it imports (seconds to ~20 s for the cubical
   library). Precompiled `.agdai` files might help; untested.
 * Tested in Edge (Chromium) only; not in Safari, Firefox or on phones.
-* The tutorial's text still mentions Emacs key bindings in places; `C-c C-v`
-  (a custom Emacs binding) does not exist in agda-mode for VS Code (`C-c C-n`).
+* The tutorial's text still mentions Emacs key bindings in places. `C-c C-v` (evaluate
+  an expression) works, as the tutorial says: the editor's extension binds it to
+  agda-mode's "compute normal form", which is `C-c C-n` there, a key a browser keeps for
+  a new window.
 * The sidebar's activity/streak display of the old site is not reimplemented.

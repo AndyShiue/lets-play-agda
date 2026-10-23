@@ -287,6 +287,33 @@ try {
   check('the exercise card shows "Solved" and the sidebar marks progress',
     (await page.locator('#exercise-1.solved').count()) === 1 && (await page.locator('.toc a[data-module="' + MODULE + '"]').evaluate((a) => a.parentElement.dataset.status)) === 'some');
   await page.screenshot({ path: path.join(OUT, '3-solved.png') });
+
+  // C-c C-v evaluates an expression: the tutorial's shortcut for it, because in a browser
+  // C-n (agda-mode's) opens a new window. Without a binding the keys copy and paste the line.
+  const keysBefore = await editorText(page);
+  await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool x' }).first().click();
+  await page.keyboard.press('Control+c');
+  await page.keyboard.press('Control+v');
+  const expressionInput = async () => {
+    for (const f of page.frames()) {
+      if (!/\/webview\/browser\/pre\//.test(f.url())) continue;
+      const input = f.locator('input[placeholder*="expression"]');
+      if (await input.count().catch(() => 0)) return input.first();
+    }
+    return null;
+  };
+  const prompt = await waitFor('the prompt of C-c C-v', expressionInput, 30).catch(() => null);
+  check('C-c C-v asks for an expression to evaluate', !!prompt);
+  if (prompt) {
+    await prompt.fill('idBool false');
+    await prompt.press('Enter');
+    const value = await waitFor('the value', async () => {
+      const t = await agdaPanel(page);
+      return /normal form/i.test(t) && /\bfalse\b/.test(t) ? t : null;
+    }, 60).catch(() => null);
+    check('and shows the value: idBool false is false', !!value, (value ?? await agdaPanel(page)).slice(0, 200));
+  }
+  check('C-c C-v left the editor text alone (no copy and paste of the line)', (await editorText(page)) === keysBefore);
   await page.close();
 
   // ---- 4. a new visit -----------------------------------------------------

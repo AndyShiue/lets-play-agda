@@ -151,5 +151,8 @@ if the site contains a hidden file of ours.
   exists. Pruned built-in extensions still show a few "Not Found" errors in the
   console (their code is missing on purpose); answer those requests in the
   service worker or drop the extensions from the build's built-in list.
-* The tutorial mentions `C-c C-v`, a custom Emacs binding; agda-mode for VS Code
-  has `C-c C-n` instead.
+* The tutorial says `C-c C-v` evaluates an expression (a custom Emacs binding of the
+  original setup; agda-mode for VS Code has `C-c C-n`, which a browser keeps for a new
+  window). `lets-play-agda-fs/package.json` binds `C-c C-v` to the same command
+  (`agda-mode.compute-normal-form[DefaultCompute]`, with agda-mode's own `when` clause).
+  Without it the keys are Copy and Paste, which duplicates the current line.
