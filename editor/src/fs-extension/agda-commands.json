@@ -1,0 +1,15 @@
+[
+  { "key": "load", "id": "agda-mode.load", "label": "Load", "hint": "C-c C-l" },
+  { "key": "case", "id": "agda-mode.case", "label": "Case split", "hint": "C-c C-c" },
+  { "key": "give", "id": "agda-mode.give", "label": "Give", "hint": "C-c C-SPC" },
+  { "key": "refine", "id": "agda-mode.refine", "label": "Refine", "hint": "C-c C-r" },
+  { "key": "auto", "id": "agda-mode.auto[AsIs]", "label": "Auto", "hint": "C-c C-a" },
+  { "key": "normalize", "id": "agda-mode.compute-normal-form[DefaultCompute]", "label": "Evaluate", "hint": "C-c C-v" },
+  { "key": "goal-context", "id": "agda-mode.goal-type-and-context[Simplified]", "label": "Goal & context", "hint": "C-c C-," },
+  { "key": "next-goal", "id": "agda-mode.next-goal", "label": "Next goal", "hint": "C-c C-f" },
+  { "key": "previous-goal", "id": "agda-mode.previous-goal", "label": "Previous goal", "hint": "C-c C-b" },
+  { "key": "infer-type", "id": "agda-mode.infer-type[Simplified]", "label": "Infer type", "hint": "C-c C-d" },
+  { "key": "goal-type", "id": "agda-mode.goal-type[Simplified]", "label": "Goal type", "hint": "C-c C-t" },
+  { "key": "context", "id": "agda-mode.context[Simplified]", "label": "Context", "hint": "C-c C-e" },
+  { "key": "cancel", "id": "agda-mode.escape", "label": "Cancel", "hint": "Esc" }
+]

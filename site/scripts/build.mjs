@@ -282,11 +282,13 @@ ${footer}
 <aside class="editor-panel" id="editor-panel" aria-label="Editor" hidden>
 <div class="editor-resizer" id="editor-resizer" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
 <div class="editor-bar"><span class="editor-title" id="editor-title">Editor</span>
+<button type="button" class="icon-btn" data-action="commands" title="Agda commands as buttons (load, case split, give, …)" aria-label="Agda commands" aria-pressed="false">λ</button>
 <button type="button" class="icon-btn" data-action="symbols" title="Symbol bar: type a backslash and a few letters, then tap the symbol" aria-label="Symbol bar" aria-pressed="false">∀</button>
 <button type="button" class="icon-btn" data-action="editor-reload" title="Restart the editor" aria-label="Restart the editor">↻</button>
 <button type="button" class="icon-btn" data-action="editor-close" title="Close the editor" aria-label="Close the editor">✕</button></div>
 <div class="editor-status" id="editor-status" role="status"></div>
 <div class="symbol-bar" id="symbol-bar" role="toolbar" aria-label="Symbols" hidden></div>
+<div class="command-bar" id="command-bar" role="toolbar" aria-label="Agda commands" hidden></div>
 </aside>
 <div class="scrim" id="scrim" hidden></div>
 </div>

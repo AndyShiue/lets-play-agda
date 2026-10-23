@@ -150,6 +150,17 @@ const exerciseLib = fs.readFileSync(path.join(repoRoot, 'site', 'scripts', 'lib'
     .filter(([symbol]) => !/[\s\u0000-\u001f]/.test(symbol));
   fs.writeFileSync(path.join(ext, 'lets-play-agda-fs', 'symbols.json'), JSON.stringify(table));
 }
+// The commands of agda-mode that the command bar runs must exist in the agda-mode that is
+// built in: otherwise a button would do nothing, and nobody would notice.
+{
+  const known = new Set(JSON.parse(fs.readFileSync(path.join(inputs.agdaMode, 'package.json'), 'utf8')).contributes.commands.map((c) => c.command));
+  const listed = JSON.parse(fs.readFileSync(path.join(root, 'src', 'fs-extension', 'agda-commands.json'), 'utf8'));
+  const missing = listed.filter((c) => !known.has(c.id));
+  if (missing.length) {
+    console.error(`agda-commands.json names commands that agda-mode does not have: ${missing.map((c) => c.id).join(', ')}`);
+    process.exit(1);
+  }
+}
 // VS Code asks for package.nls.json of every extension; an empty one avoids a 404 per start.
 for (const name of fs.readdirSync(ext)) {
   const nls = path.join(ext, name, 'package.nls.json');

@@ -521,6 +521,24 @@ function activate(context) {
     await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
   }
 
+  // ---------------------------------------------------------------------------
+  // the command bar: agda-mode's commands as buttons. They are key chords (C-c C-l, …),
+  // which a phone cannot press. agda-commands.json lists them: what the page shows, and
+  // which command of agda-mode a button runs (the build checks that those exist).
+  // ---------------------------------------------------------------------------
+  let agdaCommands = null;
+  function loadAgdaCommands() {
+    agdaCommands ??= vscode.workspace.fs.readFile(vscode.Uri.joinPath(context.extensionUri, 'agda-commands.json'))
+      .then((bytes) => JSON.parse(new TextDecoder().decode(bytes)), () => []);
+    return agdaCommands;
+  }
+
+  async function runAgdaCommand(key) {
+    const entry = (await loadAgdaCommands()).find((command) => command.key === key); // only what the list names
+    if (!entry || !vscode.window.activeTextEditor) return;
+    await vscode.commands.executeCommand(entry.id);
+  }
+
   // With the bar, agda-mode's input method would work on the same text: only one of them.
   async function useBarInsteadOfInputMethod(bar) {
     const configuration = vscode.workspace.getConfiguration('agdaMode');
@@ -539,6 +557,8 @@ function activate(context) {
       else if (data?.t === 'im-mode') await useBarInsteadOfInputMethod(!!data.bar);
       else if (data?.t === 'im-pick') await placeText(String(data.text), true);
       else if (data?.t === 'im-insert') await placeText(String(data.text), false);
+      else if (data?.t === 'cmd-sync') channel.postMessage({ t: 'cmds', items: (await loadAgdaCommands()).map(({ key, label, hint }) => ({ key, label, hint })) });
+      else if (data?.t === 'agda') await runAgdaCommand(String(data.key));
     } catch (err) {
       channel.postMessage({ t: 'error', message: String(err && err.message || err) });
     }

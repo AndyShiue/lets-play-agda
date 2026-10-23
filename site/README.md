@@ -75,6 +75,16 @@ run yet.
   shows a backslash button (which a phone's keyboard hides away) and those common symbols,
   which a tap puts in at the cursor. While the bar is on, agda-mode's input method is
   switched off (the page tells the extension), so that the two do not work on the same text.
+* **The command bar** (the `λ` button; on by default where the screen is touched), under the
+  symbol bar: agda-mode's commands as buttons (Load, Case split, Give, Refine, Auto, Evaluate,
+  Goal & context, Next/Previous goal, Infer type, Goal type, Context, Cancel), each with
+  the key chord it stands for, because a phone cannot press `C-c C-l` and the like. The list
+  is `editor/src/fs-extension/agda-commands.json` (the editor build checks that every command
+  in it exists in the agda-mode that is built in); a button runs the command at the cursor,
+  as the key chord would. As in Emacs, *Evaluate* inside a hole evaluates what is in the hole
+  (the tutorial says to put the expression there), and asks for an expression outside one.
+  *Cancel* presses Esc in the prompt of the Agda panel (agda-mode's own command for Esc does
+  not take such a prompt away here), and otherwise runs agda-mode's command.
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a
@@ -119,8 +129,10 @@ run yet.
   `interactive-widget=resizes-content`, which Safari does not support) and what the
   keyboards of real phones do is unknown. The symbol bar inserts into the editor only, not
   into the prompt of the Agda panel (`C-c C-v`).
-* Agda's commands (load, case split, refine, …) are key chords (`C-c C-l`, …) that a phone
-  cannot press; there is no touch version of them yet.
+* The command bar's buttons run agda-mode's commands; their results (the Agda panel) and
+  prompts are agda-mode's. Only *Load*, *Goal & context*, *Evaluate* and *Cancel* are
+  covered by the end-to-end test; the others (Case split, Give, Refine, Auto, …) use the same
+  path, but nothing checks what they do.
 * The tutorial's text still mentions Emacs key bindings in places. `C-c C-v` (evaluate
   an expression) works, as the tutorial says: the editor's extension binds it to
   agda-mode's "compute normal form", which is `C-c C-n` there, a key a browser keeps for

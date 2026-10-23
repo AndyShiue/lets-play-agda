@@ -103,6 +103,16 @@ async function waitAgda(page, pattern, timeoutS) {
   return text;
 }
 
+// the input of agda-mode's prompt for an expression to evaluate, in the Agda panel
+async function expressionPrompt(page) {
+  for (const f of page.frames()) {
+    if (!/\/webview\/browser\/pre\//.test(f.url())) continue;
+    const input = f.locator('input[placeholder*="expression"]');
+    if (await input.count().catch(() => 0)) return input.first();
+  }
+  return null;
+}
+
 // like waitAgda, but ignores what the panel showed before the command was run
 async function waitAgdaChange(page, previous, pattern, timeoutS) {
   let text = '';
@@ -311,14 +321,46 @@ try {
   check('without a backslash before the cursor a symbol of the bar is put in at the cursor', (await holeText()).includes('{!→ℕ≡!}'), await holeText());
   await page.screenshot({ path: path.join(OUT, '2b-symbol-bar.png') });
 
+  // ---- 2c. the command bar -------------------------------------------------
+  // Agda's commands as buttons, for a screen without a keyboard (they are key chords).
+  log('--- 2c. the command bar');
+  const commandBar = page.locator('#command-bar');
+  await page.click('[data-action="commands"]');
+  await waitFor('the command bar', async () => (await commandBar.isVisible()) && (await commandBar.locator('button').count()) >= 10, 30);
+  const labels = await commandBar.locator('.cmd-l').allInnerTexts();
+  check('the λ button shows the commands as buttons: Load, Case split, Give, Evaluate, …',
+    ['Load', 'Case split', 'Give', 'Refine', 'Evaluate', 'Goal & context'].every((l) => labels.includes(l)), labels.join(', '));
+
+  // the cursor is still in the hole: the goal and its context
+  await commandBar.locator('button[data-key="goal-context"]').click();
+  const goalText = await waitFor('the goal and its context', async () => { const t = await agdaPanel(page); return /x : Bool/.test(t) ? t : null; }, 60).catch(() => null);
+  check('"Goal & context" shows the goal at the cursor with its context', !!goalText, (goalText ?? await agdaPanel(page)).slice(0, 120));
+
+  // "Evaluate" in a hole evaluates what is in the hole (as in Emacs: the tutorial says to put the
+  // expression in the hole); the hole holds `→ℕ≡` by now, which Agda does not understand
+  const inHole = await agdaPanel(page);
+  await commandBar.locator('button[data-key="normalize"]').click();
+  const evaluated = await waitFor('the hole to be evaluated', async () => { const t = await agdaPanel(page); return t !== inHole && /error|normal form/i.test(t) ? t : null; }, 30).catch(() => null);
+  check('"Evaluate" in a hole evaluates the hole (no question asked)', !!evaluated && !(await expressionPrompt(page)), (evaluated ?? '').slice(0, 100));
+
+  // out of the hole: it asks for an expression in the Agda panel, and "Cancel" (Esc) takes the question away
+  await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool :' }).first().click();
+  await commandBar.locator('button[data-key="normalize"]').click();
+  const asked = await waitFor('the prompt of Evaluate', () => expressionPrompt(page), 30).catch(() => null);
+  check('"Evaluate" outside a hole asks for an expression to evaluate', !!asked);
+  await commandBar.locator('button[data-key="cancel"]').click();
+  const gone = await waitFor('the prompt to go', async () => ((await expressionPrompt(page)) ? null : true), 15).catch(() => null);
+  check('"Cancel" takes the question away', !!gone);
+  await page.screenshot({ path: path.join(OUT, '2c-command-bar.png') });
+
   // ---- 3. solve -----------------------------------------------------------
   log('--- 3. solve it');
   await fillHole(page);
   await sleep(1500); // autosave
   const before = await agdaPanel(page);
-  await runCommand(page, 'Agda: Load');
+  await page.locator('#command-bar button[data-key="load"]').click(); // the Load button of the command bar (2c)
   const done = await waitAgdaChange(page, before, /All Done|Error/, 240);
-  check('Agda says "All Done" for the solved exercise', /All Done/.test(done), done.slice(0, 100));
+  check('Agda says "All Done" for the solved exercise (loaded by the command bar\'s Load button)', /All Done/.test(done), done.slice(0, 100));
   await waitFor('the page to record the exercise as solved', () => page.evaluate((k) => localStorage.getItem(k), SOLVED_KEY), 30);
   const saved = JSON.parse(await page.evaluate((k) => localStorage.getItem(k), SOLVED_KEY));
   check('the page stored the reader\'s solution', /idBool x = x/.test(saved.code), JSON.stringify(saved.code).slice(0, 70));
@@ -333,15 +375,7 @@ try {
   await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool x' }).first().click();
   await page.keyboard.press('Control+c');
   await page.keyboard.press('Control+v');
-  const expressionInput = async () => {
-    for (const f of page.frames()) {
-      if (!/\/webview\/browser\/pre\//.test(f.url())) continue;
-      const input = f.locator('input[placeholder*="expression"]');
-      if (await input.count().catch(() => 0)) return input.first();
-    }
-    return null;
-  };
-  const prompt = await waitFor('the prompt of C-c C-v', expressionInput, 30).catch(() => null);
+  const prompt = await waitFor('the prompt of C-c C-v', () => expressionPrompt(page), 30).catch(() => null);
   check('C-c C-v asks for an expression to evaluate', !!prompt);
   if (prompt) {
     await prompt.fill('idBool false');

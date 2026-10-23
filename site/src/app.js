@@ -525,23 +525,98 @@
   }
 
   // tapping a button must not take the focus from the editor (a phone would put its keyboard away)
-  symbolBar.addEventListener('mousedown', (event) => event.preventDefault());
-  symbolBar.addEventListener('pointerdown', (event) => event.preventDefault());
+  for (const bar of [symbolBar, $('#command-bar')]) {
+    bar.addEventListener('mousedown', (event) => event.preventDefault());
+    bar.addEventListener('pointerdown', (event) => event.preventDefault());
+  }
   symbolBar.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-text]');
     if (button) channel?.postMessage({ t: button.dataset.message, text: button.dataset.text });
   });
   applySymbolBar();
 
+  // ---------------------------------------------------------------------------
+  // the command bar: agda-mode's commands (Load, Case split, Give, …) as buttons, for a
+  // screen without a keyboard; they are key chords (C-c C-l, …). The editor's extension
+  // says which there are (agda-commands.json) and runs the one that is tapped.
+  // ---------------------------------------------------------------------------
+  const commandBar = $('#command-bar');
+  const commandToggle = $('[data-action="commands"]');
+  const COMMAND_BAR = 'lpa:command-bar';
+  const commandsWanted = () => {
+    const saved = store.get(COMMAND_BAR);
+    return saved === null ? matchMedia('(pointer: coarse)').matches : saved === '1';
+  };
+
+  function renderCommandBar(items) {
+    commandBar.replaceChildren(...items.map(({ key, label, hint }) => {
+      const button = Object.assign(document.createElement('button'), { type: 'button', title: `${label}  (${hint})` });
+      button.dataset.key = key;
+      button.append(
+        Object.assign(document.createElement('span'), { className: 'cmd-l', textContent: label }),
+        Object.assign(document.createElement('span'), { className: 'cmd-s', textContent: hint }),
+      );
+      return button;
+    }));
+    commandBar.hidden = !commandsWanted() || items.length === 0;
+  }
+
+  function applyCommandBar() {
+    const on = commandsWanted();
+    commandToggle.setAttribute('aria-pressed', String(on));
+    if (!on) commandBar.hidden = true;
+    else channel?.postMessage({ t: 'cmd-sync' }); // the list comes back as `cmds`
+  }
+
+  // A prompt of the Agda panel (Evaluate, Case split asking for a variable) goes away when
+  // Esc is pressed in its input; agda-mode's command for Esc does not do that here. So the
+  // page presses it: the Agda panel is a same-origin frame in the editor (like the text the
+  // page reads from it to see "All Done"), two frames down.
+  function pressEscapeInPrompt() {
+    let pressed = false;
+    const visit = (win, depth) => {
+      try {
+        const doc = win.document;
+        if (depth >= 1) {
+          for (const input of $$('input[placeholder]', doc)) {
+            for (const type of ['keydown', 'keyup']) {
+              input.dispatchEvent(new win.KeyboardEvent(type, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true }));
+            }
+            pressed = true;
+          }
+        }
+        for (const f of $$('iframe', doc)) visit(f.contentWindow, depth + 1);
+      } catch { /* not accessible */ }
+    };
+    if (frame) visit(frame.contentWindow, 0);
+    return pressed;
+  }
+
+  commandBar.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-key]');
+    if (!button) return;
+    if (button.dataset.key === 'cancel' && pressEscapeInPrompt()) return;
+    channel?.postMessage({ t: 'agda', key: button.dataset.key });
+  });
+  commandToggle.addEventListener('click', () => {
+    store.set(COMMAND_BAR, commandsWanted() ? '0' : '1');
+    applyCommandBar();
+  });
+  applyCommandBar();
+
   channel?.addEventListener('message', ({ data }) => {
     switch (data?.t) {
       case 'ready':
         editorReady = true;
-        applySymbolBar(); // a new editor: tell it which input method to use, and ask for the bar
+        applySymbolBar(); // a new editor: tell it which input method to use, and ask for the bars
+        applyCommandBar();
         if (pending) channel.postMessage({ t: 'open', module: pending.module, ordinal: Number(pending.ordinal) });
         break;
       case 'im':
         renderSymbolBar(data);
+        break;
+      case 'cmds':
+        renderCommandBar(data.items);
         break;
       case 'opened':
         if (pending && data.module === pending.module && Number(data.ordinal) === Number(pending.ordinal)) {
