@@ -57,6 +57,17 @@ for (const file of fs.readdirSync(dist).filter((f) => f.endsWith('.html') && f !
   }
 })(dist);
 
+// The end-to-end test fakes a new deployment (a build id of its own, a marker in the
+// extension) in a copy of the build; none of that may be in what gets deployed: with the
+// same build id in every deployment, the readers' service workers never update.
+for (const [file, leftover] of [
+  ['sw-common.js', 'e2e0update00'],
+  ['editor/extensions/lets-play-agda-fs/extension.js', 'lpa-e2e-new-deployment'],
+]) {
+  const full = path.join(dist, file);
+  if (fs.existsSync(full) && fs.readFileSync(full, 'utf8').includes(leftover)) problems.push(`${file}: contains "${leftover}", left by the end-to-end test`);
+}
+
 console.log(problems.length ? problems.join('\n') : 'no problems found');
 console.log(`${problems.length} problem(s)`);
 process.exit(problems.length ? 1 : 0);

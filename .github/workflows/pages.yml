@@ -1,9 +1,7 @@
 # Builds the tutorial site (site/) with the embedded editor (editor/) and
 # publishes it to GitHub Pages. No Nix.
 #
-# NOT RUN YET: written from the build scripts' documentation and the pinned
-# VS Code sources, but this workflow has not been executed on GitHub.
-# Before relying on it: repository Settings -> Pages -> Source: "GitHub Actions".
+# Needs: repository Settings -> Pages -> Source: "GitHub Actions".
 #
 # VS Code for the Web is built from the MIT-licensed sources of
 # microsoft/vscode (pinned commit below), not taken from Microsoft's binary
@@ -89,7 +87,14 @@ jobs:
       - name: Check the generated pages
         run: node site/scripts/check.mjs
 
-      # Not a gate yet (see the note at the top): runs the browser test in Chrome.
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+      # Not a gate: runs the browser test in Chrome. It comes after the upload on purpose,
+      # so that whatever it does can never change what gets deployed (it works on a copy of
+      # dist/ anyway, and check.mjs refuses a build that carries its test build id).
       - name: End-to-end test
         continue-on-error: true
         working-directory: site
@@ -98,11 +103,6 @@ jobs:
         run: |
           npm install --no-audit --no-fund
           node scripts/e2e.mjs
-
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: site/dist
 
   deploy:
     needs: build

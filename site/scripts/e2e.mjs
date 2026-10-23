@@ -39,6 +39,9 @@ const CHANNEL = process.env.E2E_CHANNEL ?? 'msedge';
 const HEADED = process.argv.includes('--headed');
 const OUT = path.join(root, '.cache', 'e2e');
 fs.mkdirSync(OUT, { recursive: true });
+// The test changes files to simulate a new deployment (4b), so it runs on a copy of dist/:
+// dist/ is what gets deployed, and a run once left its test build id in the live site.
+const SERVED = path.join(root, '.cache', 'e2e-dist');
 
 const MODULE = 'Padova2025.ProgrammingBasics.Booleans';
 const PAGE = `${URL_}Padova2025.ProgrammingBasics.Booleans.html`;
@@ -58,7 +61,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // ---------------------------------------------------------------------------
 let server;
 async function startServer() {
-  server = spawn(process.execPath, [path.join(repo, 'editor', 'scripts', 'serve.mjs'), '--dir', path.join(root, 'dist'), '--port', String(PORT), '--base', BASE], { stdio: 'ignore' });
+  server = spawn(process.execPath, [path.join(repo, 'editor', 'scripts', 'serve.mjs'), '--dir', SERVED, '--port', String(PORT), '--base', BASE], { stdio: 'ignore' });
   for (let i = 0; i < 50; i++) {
     try { await fetch(`http://localhost:${PORT}/__stats`); return; } catch { await sleep(100); }
   }
@@ -163,6 +166,8 @@ if (!fs.existsSync(path.join(root, 'dist', 'index.html'))) {
   console.error('dist/ is missing: run `npm run build` first.');
   process.exit(2);
 }
+fs.rmSync(SERVED, { recursive: true, force: true });
+fs.cpSync(path.join(root, 'dist'), SERVED, { recursive: true });
 
 await startServer();
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lpa-site-e2e-'));
@@ -334,13 +339,13 @@ try {
   await page.close();
 
   // ---- 4b. a new deployment reaches a returning visitor --------------------
-  // Simulated by changing the files of dist/ the way a new build would: a new build id
-  // (the name of the worker's caches) and a changed file of the editor.
+  // Simulated by changing the files of the served copy the way a new build would: a new
+  // build id (the name of the worker's caches) and a changed file of the editor.
   log('--- 4b. a new deployment');
-  const dist = (f) => path.join(root, 'dist', f);
+  const served = (f) => path.join(SERVED, f);
   const MARKER = 'lpa-e2e-new-deployment';
-  fs.appendFileSync(dist('editor/extensions/lets-play-agda-fs/extension.js'), `\n// ${MARKER}\n`);
-  for (const f of [dist('sw-common.js'), dist('editor/vscode/out/vs/workbench/contrib/webview/browser/pre/sw-common.js')]) {
+  fs.appendFileSync(served('editor/extensions/lets-play-agda-fs/extension.js'), `\n// ${MARKER}\n`);
+  for (const f of [served('sw-common.js'), served('editor/vscode/out/vs/workbench/contrib/webview/browser/pre/sw-common.js')]) {
     fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/(CACHE_PREFIX \+ '(?:site-)?)[0-9a-f]{12}/, '$1e2e0update00'));
   }
   page = await context.newPage();
@@ -416,6 +421,11 @@ try {
   const offline = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('the editor works offline: Agda checks the exercise', /All Done/.test(offline), offline.slice(0, 80));
   await page.screenshot({ path: path.join(OUT, '5-offline.png') });
+
+  // what is in dist/ gets deployed: nothing of the simulated deployment may have got there
+  const swCommon = fs.readFileSync(path.join(root, 'dist', 'sw-common.js'), 'utf8');
+  const extension = fs.readFileSync(path.join(root, 'dist', 'editor', 'extensions', 'lets-play-agda-fs', 'extension.js'), 'utf8');
+  check('the test left dist/ (what gets deployed) untouched', !swCommon.includes('e2e0update00') && !extension.includes(MARKER));
 } catch (err) {
   exitCode = 1;
   console.error(err);
