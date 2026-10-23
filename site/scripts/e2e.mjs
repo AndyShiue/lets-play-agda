@@ -235,6 +235,42 @@ try {
     darkNotices.every((rgb) => Math.max(...rgb) < 80) && lightNotices.every((rgb) => Math.min(...rgb) > 200),
     `dark ${JSON.stringify(darkNotices)}, light ${JSON.stringify(lightNotices)}`);
 
+  // ---- 1c. links from the code to the declarations, and the hints ---------
+  log('--- 1c. links to declarations; the names a reference solution uses');
+  const useOfTrue = page.locator('#content pre.agda a.ct[href="#true"]').first();
+  check('a use of a name in the code is a link to its declaration (true → #true)', (await useOfTrue.count()) === 1);
+  await useOfTrue.click();
+  check('clicking it goes to the declaration on the page', new URL(page.url()).hash === '#true' && (await page.locator('[id="true"]').count()) === 1, page.url());
+
+  // Set is built into Agda, so there is no declaration to go to: Agda's documentation, in a tab of its own
+  const setLink = page.locator('#content pre.agda a.so').first();
+  check('`Set` links to Agda\'s documentation, in a tab of its own',
+    /agda\.readthedocs\.io\/en\/latest\/language\/universe-levels\.html$/.test((await setLink.getAttribute('href')) ?? '')
+    && (await setLink.getAttribute('target')) === '_blank' && /noopener/.test((await setLink.getAttribute('rel')) ?? ''));
+
+  // exercise 2's reference solution uses false and true: blurred until clicked
+  const chips = page.locator('#exercise-2 .hints a.hint');
+  check('exercise 2 lists the names its reference solution uses: false, true', (await chips.allInnerTexts()).join(',') === 'false,true');
+  const filter = await chips.first().evaluate((a) => getComputedStyle(a).filter);
+  check('the names are blurred until clicked', /blur/.test(filter), filter);
+  const urlBeforeClick = page.url();
+  await chips.first().click();
+  // the blur goes away in a short transition
+  const unblurred = await waitFor('the blur to go', () => chips.first().evaluate((a) => a.classList.contains('shown') && getComputedStyle(a).filter === 'none'), 5).catch(() => false);
+  check('a click shows the name and stays on the page', !!unblurred && page.url() === urlBeforeClick);
+  await chips.first().click();
+  check('the next click goes to its declaration', new URL(page.url()).hash === '#false', page.url());
+  check('an exercise with nothing to hint at has no list', (await page.locator('#exercise-1 .hints').count()) === 0);
+
+  // a use on another page of a name declared on this one goes there
+  await page.click('a[data-module="Padova2025.ProgrammingBasics.Operators"]');
+  await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.ProgrammingBasics.Operators');
+  const across = page.locator('#content pre.agda a[href^="Padova2025.ProgrammingBasics.Booleans.html#"]').first();
+  const acrossHref = await across.getAttribute('href');
+  await across.click();
+  await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, MODULE);
+  check('a use of a name from another page goes to its declaration there', page.url().endsWith(acrossHref), `${acrossHref} → ${page.url()}`);
+
   await page.click('a[data-module="Padova2025.Welcome.About"]');
   await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.Welcome.About');
   await page.waitForFunction(() => document.querySelectorAll('#char-table tr').length > 20, null, { timeout: 10000 });

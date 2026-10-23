@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/build-all.mjs",
     "build:pages": "node scripts/build.mjs",
-    "test": "node --test scripts/test-exercises.mjs",
+    "test": "node --test scripts/test-exercises.mjs scripts/test-links.mjs",
     "check": "node scripts/check.mjs",
     "serve": "node ../editor/scripts/serve.mjs --dir dist --base /lets-play-agda/ --port 8080",
     "e2e": "node scripts/e2e.mjs"

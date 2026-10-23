@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { renderMarkdown, plainText } from './lib/markdown.mjs';
-import { highlight, collectDeclarations } from './lib/agda.mjs';
+import { highlight, collectDeclarations, addOperatorParts } from './lib/agda.mjs';
 import { createZip } from './lib/zip.mjs';
 
 const require = createRequire(import.meta.url);
@@ -70,17 +70,21 @@ for (const mod of modules.values()) {
   for (const b of mod.info.blocks) if (b.kind === 'agda') collectDeclarations(ex.isExercise(b) ? ex.solutionDisplay(b.text) : b.text, mod.decls);
 }
 
-/** Names visible in a module: its own declarations and those of everything it imports. */
+/**
+ * Names visible in a module: its own declarations and those of everything it imports
+ * (the nearest declaration of a name wins), with the module each is declared in.
+ * `using`, `hiding` and `renaming` are not looked at (8 import lines of the tutorial).
+ */
 function visibleNames(name) {
   const result = new Map();
   const seen = new Set();
   (function visit(n) {
     if (seen.has(n) || !modules.has(n)) return;
     seen.add(n);
-    for (const [k, v] of modules.get(n).decls) if (!result.has(k)) result.set(k, v);
+    for (const [k, v] of modules.get(n).decls) if (!result.has(k)) result.set(k, { kind: v, module: n, name: k });
     for (const d of modules.get(n).deps) visit(d);
   })(name);
-  return result;
+  return addOperatorParts(result);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,10 +142,23 @@ function rewriteUrl(from) {
   };
 }
 
-function renderPage(mod) {
+const KIND_CLASS = { datatype: 'dt', record: 'dt', constructor: 'ct', function: 'fn', field: 'fd' };
+const linkStats = { known: 0, linked: 0, unresolved: new Map() };
+
+/**
+ * `linking`: the second pass. A use of a declared name links to its declaration when that has
+ * an anchor on its page, which the first pass found out (pages.get(module).ids).
+ */
+function renderPage(mod, linking = false) {
   const names = visibleNames(mod.name);
   const anchors = new Set();
   const firstAgda = mod.info.blocks.find((b) => b.kind === 'agda');
+  const href = (entry) => {
+    const target = linking && pages.get(entry.module);
+    if (!target || !target.ids.has(entry.name)) return null;
+    return (entry.module === mod.name ? '' : hrefOf(entry.module)) + '#' + encodeURIComponent(entry.name);
+  };
+  const stats = linking ? linkStats : undefined;
 
   const pre = (cls, code) => `<pre class="${cls}"><code>${code}</code></pre>\n`;
   const exercisesByBlock = new Map(mod.info.exercises.map((e) => [e.block, e]));
@@ -159,18 +176,29 @@ function renderPage(mod) {
       if (exercise) {
         const { shown } = ex.holeify(b.text);
         const solution = ex.solutionDisplay(b.text);
+        const statementRefs = new Map();
+        const solutionRefs = new Map();
+        const statementHtml = highlight(shown, { names, anchors, href, collect: statementRefs, stats });
+        const solutionHtml = highlight(solution, { names, noAnchors: true, href, collect: solutionRefs, stats });
+        // what the solution uses of the earlier material, that the exercise does not show already
+        const own = collectDeclarations(solution);
+        const uses = [...solutionRefs].filter(([key, ref]) => !statementRefs.has(key) && !own.has(ref.entry.name));
+        const hints = uses.length
+          ? `<div class="hints"><span class="hints-title">The reference solution uses:</span> ${uses.map(([, ref]) =>
+            `<a class="hint ${KIND_CLASS[ref.entry.kind]}" href="${escAttr(ref.href)}" title="Click to show; click again to go to its declaration">${esc(ref.entry.name)}</a>`).join(' ')}</div>\n`
+          : '';
         return `<section class="exercise" id="exercise-${exercise.ordinal}" data-module="${escAttr(mod.name)}" data-ordinal="${exercise.ordinal}" data-id="${escAttr(exercise.id)}">
 <div class="exercise-head"><span class="badge">Exercise ${exercise.ordinal}</span><code>${esc(exercise.id)}</code></div>
-${pre('agda', highlight(shown, { names, anchors }))}<div class="exercise-actions">
+${pre('agda', statementHtml)}<div class="exercise-actions">
 <button type="button" class="btn primary" data-action="edit">✏️ Edit hole…</button>
 <span class="exercise-status" data-status></span>
 </div>
-<div class="your-code" hidden><div class="your-code-title">Your solution</div><pre class="agda"><code></code></pre></div>
-<details class="solution"><summary>Reference solution</summary>${pre('agda', highlight(solution, { names, noAnchors: true }))}</details>
+${hints}<div class="your-code" hidden><div class="your-code-title">Your solution</div><pre class="agda"><code></code></pre></div>
+<details class="solution"><summary>Reference solution</summary>${pre('agda', solutionHtml)}</details>
 </section>\n`;
       }
       const header = b === firstAgda && /^\s*(\{-#|module\s)/.test(b.text);
-      return pre(header ? 'agda header' : 'agda', highlight(b.text, { names, anchors }));
+      return pre(header ? 'agda header' : 'agda', highlight(b.text, { names, anchors, href, stats }));
     },
   };
 
@@ -183,7 +211,9 @@ ${pre('agda', highlight(shown, { names, anchors }))}<div class="exercise-actions
   pages.set(mod.name, { html: body, ids, headings: env.headings, text: plainText(body) });
 }
 
-for (const mod of modules.values()) renderPage(mod);
+for (const mod of modules.values()) renderPage(mod); // first: which anchors the pages have
+links.length = 0;
+for (const mod of modules.values()) renderPage(mod, true); // second: the same, with the links to them
 
 // ---------------------------------------------------------------------------
 // 4. link check
@@ -406,6 +436,11 @@ let size = 0;
 for (const f of fs.readdirSync(out, { withFileTypes: true })) if (f.isFile()) size += fs.statSync(path.join(out, f.name)).size;
 console.log(`Built ${htmlFiles.length} pages, ${exerciseCount} exercises → ${out}`);
 console.log(`  build id: ${BUILD_ID}; pages+assets: ${(size / 1048576).toFixed(1)} MB; ${order.length} pages in reading order`);
+console.log(`  links: ${linkStats.linked} of ${linkStats.known} uses of declared names link to their declaration`);
+if (process.argv.includes('--link-report')) {
+  const top = [...linkStats.unresolved].sort((a, b) => b[1] - a[1]).slice(0, 60);
+  console.log(`  identifiers that are no declared name (${linkStats.unresolved.size} different), the commonest:\n    ${top.map(([t, n]) => `${t} ${n}`).join('  ')}`);
+}
 if (orphans.length) console.log(`  not in the table of contents (generated anyway): ${orphans.join(', ')}`);
 if (unknownTex.size) console.warn(`  unknown TeX macros: ${[...unknownTex].join(' ')}`);
 if (broken.length) {

@@ -48,11 +48,33 @@ run yet.
   blocks with `{--}…{--}` or `-- Holify` are exercises (446 of them); the page
   shows them with holes `{!!}` and offers the reference solution; `-- Tests` /
   `-- EX:` lines become checks that Agda runs by `refl`.
-* **Highlighting** is done without running Agda (keywords, comments, holes, and
+* **Highlighting and links** are done without running Agda (keywords, comments, holes, and
   the names the tutorial declares, coloured like Agda does). Declarations get
-  anchors so `Page.html#name` links work. Not available any more: clickable
-  references from every identifier to its definition and the type tooltips, which
-  need Agda to resolve names.
+  anchors so `Page.html#name` links work, and every use of a declared name is a link
+  to its declaration, on the same page or another one (the build does two passes: the
+  first finds out which anchors the pages have). The names are resolved by their
+  spelling, not by Agda's scoping: the nearest module that declares the name wins (its
+  own, then what it imports, `using`/`hiding`/`renaming` ignored: 8 lines of the
+  tutorial), the parts of a mixfix name (`+` of `_+_`, `≡⟨` and `⟩` of `_≡⟨_⟩_`) count
+  as the name, and a name that the declaration around the use binds itself (a
+  parameter, a lambda variable, a variable in the patterns of a clause) is left
+  alone. Names of the libraries (`Cubical.…`, `Agda.Primitive`) are not declared by the
+  tutorial and do not link. `Set`, `Set₁`, `Setω` and `Prop` are built into Agda, so
+  there is no declaration to go to: they link to Agda's documentation (universe levels,
+  `Prop`), in a tab of their own. The `∈` of `Σ[ x ∈ A ]` is notation and does not link
+  to the tutorial's `_∈_`. Not available: the type tooltips, which need Agda. Measured on the
+  tutorial: 9842 uses of declared names, all linked (a name whose declaration is in a
+  block that the page hides would not link: there is none); the identifiers that
+  are not linked are almost all local variables. `node scripts/build.mjs --link-report`
+  lists the commonest. How right the links are is only spot-checked (`go`, `f`, `g`,
+  `id` and the commonest names were looked at: right), not measured.
+* **The names a reference solution uses.** Under each exercise (when there is
+  something to show) the page lists the names of the earlier material that the
+  reference solution uses, except those the exercise shows already: blurred, so that
+  they do not give the solution away; a click shows a name, the next click goes to
+  its declaration. 397 of the 446 exercises have such a list. It follows from the
+  same name resolution, so a name that is linked wrongly can be in a list, and one
+  that is not found can be missing.
 * **The editor** opens in a panel on the right (an `<iframe src="editor/">`) when
   you press *Edit hole…*. The page and the editor talk over a `BroadcastChannel`;
   the page notices when Agda says *All Done* and records the exercise as solved.

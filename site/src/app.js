@@ -233,6 +233,14 @@
   }
 
   document.addEventListener('click', (event) => {
+    // a name the reference solution uses: the first click shows it, the next goes to its declaration
+    const hint = event.target.closest('a.hint');
+    if (hint && !hint.classList.contains('shown') && event.button === 0) {
+      event.preventDefault();
+      hint.classList.add('shown');
+      hint.title = 'Go to its declaration';
+      return;
+    }
     const a = event.target.closest('a[href]');
     if (a && !event.defaultPrevented && event.button === 0 && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
       if (a.dataset.action) {

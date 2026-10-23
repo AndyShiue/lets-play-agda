@@ -157,6 +157,13 @@ pre:hover .copy-btn, .copy-btn:focus { opacity: 1; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn[disabled] { opacity: .6; cursor: progress; }
+/* a use of a declared name links to its declaration: coloured like the declaration, underlined on hover */
+pre.agda a { text-decoration: none; }
+pre.agda a:hover { text-decoration: underline; text-underline-offset: .15em; }
+/* the names the reference solution uses: blurred until clicked, then a link to the declaration */
+.hints { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; margin-top: .75rem; font-size: .88rem; color: var(--muted); }
+.hints .hint { padding: .05rem .45rem; border: 1px solid var(--line); border-radius: .35rem; background: var(--bg); font: .85rem/1.5 var(--mono); filter: blur(.42em); user-select: none; cursor: pointer; transition: filter .15s; }
+.hints .hint.shown { filter: none; user-select: text; }
 .your-code { margin-top: .8rem; }
 .your-code-title, details.solution > summary { font-size: .85rem; color: var(--muted); }
 details.solution { margin-top: .8rem; }

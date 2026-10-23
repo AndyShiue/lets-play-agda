@@ -164,7 +164,8 @@ The pages of the table of contents are the modules reached from
 * The tutorial's text still mentions Emacs key bindings in a few places. `C-c C-v`
   (evaluate an expression; a custom binding of the original setup, needed because a browser
   keeps `C-n` for a new window) works: the editor binds it to the command of agda-mode's `C-c C-n`.
-* Without Agda's own highlighting, identifiers in code are not clickable and show no type on
-  hover (symbols show how to type them).
+* Without Agda's own highlighting, identifiers show no type on hover (symbols show how to
+  type them). Uses of names the tutorial declares are links to their declarations, found by
+  the spelling of the name rather than by Agda's scoping (see `site/README.md`).
 * The first start of the editor downloads about 30 MB (cached afterwards), and Agda needs a few
   to ~20 seconds to check the modules an exercise imports.
