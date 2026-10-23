@@ -21,8 +21,10 @@ const LEFTOVERS = [
   [/\]\([^)]*\)/, 'link syntax'],
 ];
 
-for (const file of fs.readdirSync(dist).filter((f) => f.endsWith('.html') && f !== '404.html')) {
-  const html = fs.readFileSync(path.join(dist, file), 'utf8');
+// the pages of the main site and of the translation (a directory of it)
+const pageDirs = [dist, path.join(dist, 'zh-TW')].filter((d) => fs.existsSync(d));
+for (const [dir, file] of pageDirs.flatMap((d) => fs.readdirSync(d).filter((f) => f.endsWith('.html') && f !== '404.html').map((f) => [d, f]))) {
+  const html = fs.readFileSync(path.join(dir, file), 'utf8');
   const article = html.slice(html.indexOf('<article'), html.indexOf('</article>'));
   const text = stripCode(article).replace(/<[^>]*>/g, ' ');
   const report = (what, sample = '') => problems.push(`${file}: ${what}${sample ? ': ' + sample.replace(/\s+/g, ' ').slice(0, 90) : ''}`);

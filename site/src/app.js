@@ -18,6 +18,67 @@
   const app = $('#app');
   const main = $('#main');
 
+  // The words of what this script shows (the rest of the page is generated with its words, see
+  // scripts/build.mjs). A translation is a site of its own in a directory of the main one, `lang`.
+  const STRINGS = {
+    en: {
+      restored: (n) => `Restored ${n} entries.`,
+      nothingNew: 'Nothing new in that file.',
+      notBackup: 'That does not look like a backup of this site.',
+      solvedMark: '✓ Solved',
+      copy: 'Copy', copied: 'Copied', pressCtrlC: 'Press Ctrl+C',
+      showHint: '👉 Show hint…', showMore: '👉 Show more…',
+      peek: 'Do you want to peek at the reference solution?',
+      toDeclaration: 'Go to its declaration',
+      searchNone: 'No results',
+      editorFrame: 'Agda editor', editor: 'Editor', exercise: 'Exercise',
+      opening: 'Opening the exercise…',
+      starting: 'Starting the editor. The first start downloads about 30 MB; later starts use the cache.',
+      restarting: 'Restarting the editor…',
+      didNotStart: 'The editor did not start. Close it and try again, or reload the page.',
+      needsWorker: 'This browser cannot run the editor here: it needs service workers (HTTPS or localhost).',
+      preparing: 'Preparing the editor for its first start…',
+      noChannel: 'This browser does not support the editor (BroadcastChannel).',
+      editorError: 'The editor reported an error.',
+      solvedToast: '🎉 Exercise solved!',
+      newVersion: 'A new version of this site is available.', reload: 'Reload',
+      workerRemoved: 'Service worker removed. Reloading without it…',
+      typeHint: (ch, how) => `${ch}   type: ${how}`,
+      streak: (current, longest) => `Streak: ${current} ${current === 1 ? 'day' : 'days'} · longest ${longest}`,
+      day: (ms) => new Date(ms).toDateString(),
+    },
+    'zh-TW': {
+      restored: (n) => `已還原 ${n} 筆紀錄。`,
+      nothingNew: '這個檔案裡沒有新的內容。',
+      notBackup: '這看起來不是本網站的備份檔。',
+      solvedMark: '✓ 已解出',
+      copy: '複製', copied: '已複製', pressCtrlC: '請按 Ctrl+C',
+      showHint: '👉 顯示提示…', showMore: '👉 顯示更多…',
+      peek: '要偷看參考解答嗎？',
+      toDeclaration: '前往它的宣告處',
+      searchNone: '沒有結果',
+      editorFrame: 'Agda 編輯器', editor: '編輯器', exercise: '習題',
+      opening: '正在開啟習題…',
+      starting: '正在啟動編輯器。第一次啟動會下載約 30 MB；之後會使用快取。',
+      restarting: '正在重新啟動編輯器…',
+      didNotStart: '編輯器沒有啟動。請關閉後再試一次，或重新載入網頁。',
+      needsWorker: '這個瀏覽器無法在這裡執行編輯器：需要 service worker（HTTPS 或 localhost）。',
+      preparing: '正在為第一次啟動準備編輯器…',
+      noChannel: '這個瀏覽器不支援編輯器（BroadcastChannel）。',
+      editorError: '編輯器回報了錯誤。',
+      solvedToast: '🎉 習題解出了！',
+      newVersion: '本網站有新版本。', reload: '重新載入',
+      workerRemoved: '已移除 service worker。正在不帶它重新載入…',
+      typeHint: (ch, how) => `${ch}   輸入：${how}`,
+      streak: (current, longest) => `連續紀錄：${current} 天 · 最長 ${longest} 天`,
+      day: (ms) => new Date(ms).toLocaleDateString('zh-TW', { dateStyle: 'full' }),
+    },
+  };
+  const t = (key, ...args) => {
+    const s = STRINGS[config.lang]?.[key] ?? STRINGS.en[key];
+    return typeof s === 'function' ? s(...args) : s;
+  };
+
   const store = {
     get(key) { try { return localStorage.getItem(key); } catch { return null; } },
     set(key, value) { try { localStorage.setItem(key, value); } catch { /* private mode */ } },
@@ -66,9 +127,9 @@
         }
         refreshProgress();
         $$('.exercise').forEach(renderExercise);
-        toast(n ? `Restored ${n} entries.` : 'Nothing new in that file.');
+        toast(n ? t('restored', n) : t('nothingNew'));
       } catch (err) {
-        toast('That does not look like a backup of this site.');
+        toast(t('notBackup'));
       }
     };
     input.click();
@@ -145,7 +206,7 @@
   function renderExercise(section) {
     const saved = readSolved(section.dataset.module, section.dataset.ordinal);
     section.classList.toggle('solved', !!saved);
-    $('[data-status]', section).textContent = saved ? '✓ Solved' + (saved.at ? ` · ${new Date(saved.at).toLocaleDateString()}` : '') : '';
+    $('[data-status]', section).textContent = saved ? t('solvedMark') + (saved.at ? ` · ${new Date(saved.at).toLocaleDateString()}` : '') : '';
     const mine = $('.your-code', section);
     if (saved?.code) {
       mine.hidden = false;
@@ -160,10 +221,10 @@
     if (!Number(content.dataset.exercises)) store.set(`lpa:visited:${module}`, '1');
 
     for (const pre of $$('pre.agda:not(.header), pre.code', content)) {
-      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'copy-btn', textContent: 'Copy' });
+      const button = Object.assign(document.createElement('button'), { type: 'button', className: 'copy-btn', textContent: t('copy') });
       button.addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText(pre.innerText); button.textContent = 'Copied'; } catch { button.textContent = 'Press Ctrl+C'; }
-        setTimeout(() => { button.textContent = 'Copy'; }, 1500);
+        try { await navigator.clipboard.writeText(pre.innerText); button.textContent = t('copied'); } catch { button.textContent = t('pressCtrlC'); }
+        setTimeout(() => { button.textContent = t('copy'); }, 1500);
       });
       pre.append(button);
     }
@@ -173,7 +234,7 @@
       if (box.querySelector(':target') || (location.hash && box.querySelector(`[id="${CSS.escape(decodeURIComponent(location.hash.slice(1)))}"]`))) continue;
       box.hidden = true;
       const toggle = Object.assign(document.createElement('button'), {
-        type: 'button', className: 'collapse-toggle', textContent: box.classList.contains('Hint') ? '👉 Show hint…' : '👉 Show more…',
+        type: 'button', className: 'collapse-toggle', textContent: box.classList.contains('Hint') ? t('showHint') : t('showMore'),
       });
       toggle.addEventListener('click', () => { box.hidden = false; toggle.remove(); });
       box.before(toggle);
@@ -183,7 +244,7 @@
       renderExercise(section);
       const details = $('details.solution', section);
       const agreed = () => section.classList.contains('solved') || details.dataset.confirmed;
-      const ask = () => confirm('Do you want to peek at the reference solution?');
+      const ask = () => confirm(t('peek'));
       // Ask BEFORE the answer is shown: stop the summary from opening the box by itself
       // and open it by hand once the reader has agreed.
       $('summary', details).addEventListener('click', (event) => {
@@ -206,7 +267,8 @@
   // navigation without reloading
   // ---------------------------------------------------------------------------
   const isPageLink = (a) => {
-    if (a.target === '_blank' || a.hasAttribute('download') || a.origin !== location.origin) return false;
+    // (the link to the other language is a page load of its own: other styles, other index)
+    if (a.target === '_blank' || a.hasAttribute('download') || a.origin !== location.origin || a.classList.contains('lang-switch')) return false;
     const path = a.pathname;
     return (path.endsWith('.html') || path.endsWith('/')) && !path.includes('/editor/');
   };
@@ -238,7 +300,7 @@
     if (hint && !hint.classList.contains('shown') && event.button === 0) {
       event.preventDefault();
       hint.classList.add('shown');
-      hint.title = 'Go to its declaration';
+      hint.title = t('toDeclaration');
       return;
     }
     const a = event.target.closest('a[href]');
@@ -321,7 +383,7 @@
     const mark = (s) => words.reduce((html, w) => html.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig'), '<mark>$1</mark>'), escapeHtml(s));
     results.innerHTML = hits.length
       ? hits.map((h) => `<a href="${h.page.u}${h.heading ? '#' + h.heading[1] : ''}"><strong>${mark(h.page.t)}</strong>${h.heading ? ` › ${mark(h.heading[0])}` : ''}<small>${mark(h.snippet)}</small></a>`).join('')
-      : '<a href="#" tabindex="-1">No results</a>';
+      : `<a href="#" tabindex="-1">${t('searchNone')}</a>`;
   }
 
   searchInput.addEventListener('focus', loadIndex);
@@ -372,8 +434,12 @@
 
   const setStatus = (text) => { statusBox.textContent = text; };
 
+  // where the main site is, from this page: a translation lives in a directory of it and
+  // shares its editor and its service worker
+  const siteRoot = config.root ?? './';
+
   function editorUrl() {
-    return `editor/?embedded=1&theme=${effectiveTheme()}`;
+    return `${siteRoot}editor/?embedded=1&theme=${effectiveTheme()}`;
   }
 
   // What survives reloading the page: whether the editor was open, and with which exercise.
@@ -395,7 +461,7 @@
     showPanel();
     saveEditorState({ open: true });
     if (!frame) {
-      frame = Object.assign(document.createElement('iframe'), { title: 'Agda editor', src: editorUrl() });
+      frame = Object.assign(document.createElement('iframe'), { title: t('editorFrame'), src: editorUrl() });
       frame.allow = 'cross-origin-isolated; clipboard-read; clipboard-write';
       panel.append(frame);
     }
@@ -414,8 +480,8 @@
     const { module, ordinal, title } = readEditorState();
     if (!module || !channel) return;
     pending = { module, ordinal };
-    $('#editor-title').textContent = title || 'Editor';
-    setStatus(editorReady ? 'Opening the exercise…' : 'Starting the editor. The first start downloads about 30 MB; later starts use the cache.');
+    $('#editor-title').textContent = title || t('editor');
+    setStatus(editorReady ? t('opening') : t('starting'));
     startRetry();
   }
 
@@ -428,7 +494,7 @@
     pending = again;
     clearInterval(watchTimer);
     showEditor();
-    if (pending) { setStatus('Restarting the editor…'); startRetry(); }
+    if (pending) { setStatus(t('restarting')); startRetry(); }
   }
 
   toggle.addEventListener('click', async () => {
@@ -443,7 +509,7 @@
       if (!pending) { clearInterval(retryTimer); return; }
       if (Date.now() - started > 240000) {
         clearInterval(retryTimer);
-        setStatus('The editor did not start. Close it and try again, or reload the page.');
+        setStatus(t('didNotStart'));
         return;
       }
       channel?.postMessage({ t: 'open', module: pending.module, ordinal: Number(pending.ordinal) });
@@ -454,11 +520,11 @@
     if (self.crossOriginIsolated) return true;
     if (!('serviceWorker' in navigator) || !isSecureContext) {
       showPanel();
-      setStatus('This browser cannot run the editor here: it needs service workers (HTTPS or localhost).');
+      setStatus(t('needsWorker'));
       return false;
     }
     showPanel(); // not the editor itself: a frame in a page that is not isolated yet could not be isolated either
-    setStatus('Preparing the editor for its first start…');
+    setStatus(t('preparing'));
     await registerWorker();
     await navigator.serviceWorker.ready;
     if (!navigator.serviceWorker.controller) {
@@ -472,15 +538,15 @@
   async function editExercise(section) {
     if (!section) return;
     const intent = { module: section.dataset.module, ordinal: section.dataset.ordinal, path: location.pathname + location.search };
-    if (!channel) { toast('This browser does not support the editor (BroadcastChannel).'); return; }
+    if (!channel) { toast(t('noChannel')); return; }
     if (!(await ensureIsolated(intent))) return;
     pending = { ...intent };
     recordActivity();
     showEditor();
-    const title = `${section.dataset.id || 'Exercise'} — ${section.closest('#content').dataset.title}`;
+    const title = `${section.dataset.id || t('exercise')} — ${section.closest('#content').dataset.title}`;
     $('#editor-title').textContent = title;
     saveEditorState({ module: intent.module, ordinal: intent.ordinal, title });
-    setStatus(editorReady ? 'Opening the exercise…' : 'Starting the editor. The first start downloads about 30 MB; later starts use the cache.');
+    setStatus(editorReady ? t('opening') : t('starting'));
     startRetry();
     channel.postMessage({ t: 'open', module: intent.module, ordinal: Number(intent.ordinal) });
   }
@@ -641,7 +707,7 @@
         if (active && data.module === active.module && String(data.ordinal) === active.ordinal) solved(data.text);
         break;
       case 'error':
-        setStatus(data.message || 'The editor reported an error.');
+        setStatus(data.message || t('editorError'));
         break;
       default:
     }
@@ -683,7 +749,7 @@
     recordActivity();
     if (first) {
       confetti();
-      toast('🎉 Exercise solved!');
+      toast(t('solvedToast'));
     }
   }
 
@@ -711,7 +777,7 @@
   async function registerWorker() {
     // updateViaCache: 'none' also fetches the scripts the worker imports (sw-common.js,
     // which carries the build id) past the HTTP cache, so that a new build is noticed at once
-    return navigator.serviceWorker.register('sw.js', { scope: './', updateViaCache: 'none' });
+    return navigator.serviceWorker.register(`${siteRoot}sw.js`, { scope: siteRoot, updateViaCache: 'none' });
   }
 
   // A new build's worker takes over at once (see sw.js); the files this page was
@@ -720,8 +786,8 @@
     if (document.visibilityState === 'hidden') { location.reload(); return; } // nobody is looking
     if ($('.update-bar')) return;
     const bar = Object.assign(document.createElement('div'), { className: 'update-bar', role: 'status' });
-    const text = Object.assign(document.createElement('span'), { textContent: 'A new version of this site is available.' });
-    const reload = Object.assign(document.createElement('button'), { type: 'button', className: 'btn primary', textContent: 'Reload' });
+    const text = Object.assign(document.createElement('span'), { textContent: t('newVersion') });
+    const reload = Object.assign(document.createElement('button'), { type: 'button', className: 'btn primary', textContent: t('reload') });
     reload.addEventListener('click', () => location.reload());
     bar.append(text, reload);
     document.body.append(bar);
@@ -737,7 +803,7 @@
     // escape hatch: ?nosw removes the service worker and its caches
     if (new URLSearchParams(location.search).has('nosw')) {
       await removeWorker();
-      toast('Service worker removed. Reloading without it…');
+      toast(t('workerRemoved'));
       setTimeout(() => { location.replace(location.pathname); }, 800);
       return;
     }
@@ -795,7 +861,7 @@
     const holder = event.target.closest?.('pre.agda, pre.code, code');
     if (!holder) return;
     const ch = symbolAt(event.clientX, event.clientY);
-    const hint = ch ? `${ch}   type: ${unicode[ch]}` : '';
+    const hint = ch ? t('typeHint', ch, unicode[ch]) : '';
     if (holder.title !== hint) holder.title = hint;
   });
 
@@ -856,8 +922,8 @@
     const lead = (new Date(shown[0].ms).getDay() + 6) % 7;
     const cells = [...Array(lead).fill(null), ...shown];
     box.hidden = false;
-    box.innerHTML = `<div class="activity-title">Streak: ${current} ${current === 1 ? 'day' : 'days'} · longest ${longest}</div>` +
-      `<div class="activity-grid">${cells.map((c) => (c ? `<i class="daybox ${c.status}" title="${new Date(c.ms).toDateString()}"></i>` : '<i></i>')).join('')}</div>`;
+    box.innerHTML = `<div class="activity-title">${t('streak', current, longest)}</div>` +
+      `<div class="activity-grid">${cells.map((c) => (c ? `<i class="daybox ${c.status}" title="${t('day', c.ms)}"></i>` : '<i></i>')).join('')}</div>`;
   }
 
   // ---------------------------------------------------------------------------

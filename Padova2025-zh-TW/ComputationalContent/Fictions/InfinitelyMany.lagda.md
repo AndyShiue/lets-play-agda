@@ -1,0 +1,62 @@
+```
+{-# OPTIONS --cubical-compatible #-}
+module Padova2025-zh-TW.ComputationalContent.Fictions.InfinitelyMany (⊥ : Set) where
+```
+
+# 無窮子序列
+
+```
+open import Padova2025-zh-TW.ProgrammingBasics.Booleans
+open import Padova2025-zh-TW.ProgrammingBasics.Naturals.Base
+open import Padova2025-zh-TW.ProgrammingBasics.Naturals.Arithmetic
+open import Padova2025-zh-TW.ProvingBasics.Equality.Base
+open import Padova2025-zh-TW.ProvingBasics.Connectives.Disjunction
+open import Padova2025-zh-TW.ProvingBasics.Connectives.Existential
+open import Padova2025-zh-TW.ProvingBasics.Connectives.Conjunction
+open import Padova2025-zh-TW.ProvingBasics.Termination.Ordering
+open import Padova2025-zh-TW.ComputationalContent.DoubleNegation (⊥)
+```
+
+```
+not-true-is-false : {x : Bool} → ¬ (true ≡ x) → ¬ ¬ (false ≡ x)
+-- Holify
+not-true-is-false {false} p = return refl
+not-true-is-false {true}  p = ⊥-elim (p refl)
+```
+
+條件 `Boundedly α P` 表示謂詞 `P` 只被 `α` 的有限多個值所滿足。
+  
+```
+Boundedly : {X : Set} → (ℕ → X) → (X → Set) → Set
+Boundedly f P = Σ[ a ∈ ℕ ] ((b : ℕ) → b ≥ a → ¬ P (f b))
+```
+
+條件 `Infinitely α P` 以正面的方式表示，`α` 的值有無限多次滿足 `P`。
+ 
+```
+Infinitely : {X : Set} → (ℕ → X) → (X → Set) → Set
+Infinitely f P = (a : ℕ) → ¬ ¬ (Σ[ b ∈ ℕ ] b ≥ a × P (f b))
+```
+
+```
+lemma : {X : Set} → {α : ℕ → X} {P : X → Set} → ¬ Boundedly α P → Infinitely α P
+lemma {α = α} {P = P} p a = oracle {∃[ b ] b ≥ a × P (α b)} ⟫= λ
+  { (left  q) → {--}return q{--}
+  ; (right q) → {--}⊥-elim (p (a , λ b b≥a Pb → q (b , b≥a , Pb))){--}
+  }
+```
+
+```
+InfinitaryPigeonholePrinciple : (ℕ → Bool) → Set
+InfinitaryPigeonholePrinciple α = Infinitely α (false ≡_) ⊎ Infinitely α (true ≡_)
+```
+
+```
+infinitary-pigeonhole-principle : (α : ℕ → Bool) → ¬ ¬ InfinitaryPigeonholePrinciple α
+infinitary-pigeonhole-principle α = oracle {Boundedly α (true ≡_)} ⟫= λ
+  { (left  (a , p)) → {--}return (left  λ i →
+    not-true-is-false (p (max i a) (max-inflationaryᵣ i a)) ⟫= λ q →
+    return (max i a , max-inflationaryₗ i a , q)){--}
+  ; (right p)       → {--}return (right (lemma {P = (true ≡_)} p)){--}
+  }
+```

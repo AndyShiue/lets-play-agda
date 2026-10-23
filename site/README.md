@@ -15,7 +15,8 @@ see the [top-level README](../README.md) for credits and licenses.
 scripts/build-all.mjs   editor + site, with one build id
 scripts/build.mjs       the site generator
 scripts/lib/            Markdown renderer, Agda highlighter, exercise conventions
-scripts/check.mjs       lint of the generated pages
+scripts/check.mjs       lint of the generated pages (the English ones and the translation's)
+scripts/translate.mjs   the translation's tool: skeleton, extract, apply, status, check
 scripts/e2e.mjs         end-to-end test in a real browser
 src/app.css, app.js     the site's styles and client code
 ../editor/              the editor (VS Code for the Web + Agda WASM), see its README
@@ -134,6 +135,36 @@ run yet.
   The end-to-end test simulates a deployment and checks all of this.
 * **If the service worker ever misbehaves:** open any page with `?nosw` to remove
   it and its caches.
+* **The translation** (`../Padova2025-zh-TW`, Traditional Chinese; see the top-level README) is a
+  site of its own in a directory of this one, `dist/zh-TW/`. `build-all.mjs` builds the main
+  site (with `--alternate zh-TW/ --alternate-label 繁中`, which puts the language button in the
+  top bar) and then `build.mjs --lang zh-TW --source ../Padova2025-zh-TW --out dist/zh-TW --root ../
+  --with-editor --alternate ../ --alternate-label EN`. What differs from a standalone build:
+  * The translation's modules have a prefix of their own, and so do its pages, links and
+    exercises: `Padova2025-zh-TW.<Module>.html` (`PREFIX` in `build.mjs`; the name comes from the
+    file's place in the source directory, and the build warns if the file declares another),
+    `data-module="Padova2025-zh-TW.…"` (so the progress of the two languages is kept apart),
+    and the exercise files of the editor are `Exercise-zh-TW/<Chapter>/<Module>/Ex<n>.agda`,
+    of the translation's modules, with its own `Padova2025-zh-TW.ProvingBasics.Equality.Base`
+    in the checks of `-- EX:` lines (`exercises.cjs`: `splitModuleName`). The editor's
+    workspace holds both trees (`editor/scripts/build-site.mjs`). The button in the top bar
+    goes to the page of the same module in the other language.
+  * The ids of the headings are the original's (`originalHeadingIds`: the build renders the
+    original page's headings to get them), otherwise a link such as
+    `Conjunction.html#exercise-de-morgans-laws` would not find its heading once the heading is Chinese.
+    The numbers of headings agree because `translate.mjs check` says so.
+  * Not emitted: the editor, `sw.js`, `404.html`: they are the main site's (the page's
+    `config.root` is `../`, so that the editor is `../editor/` and the worker `../sw.js` with
+    scope `../`). The archives are the translation's own: `Padova2025-zh-TW.zip` and
+    `Padova2025-zh-TW-solutions.zip`.
+  * The words around the tutorial: `UI` in `build.mjs` (what the page generator writes: the
+    exercise boxes, the top bar, the pager) and `STRINGS` in `src/app.js` (what the script
+    shows: messages, the copy button, the hint toggles; chosen by `config.lang`). The editor's
+    own messages (agda-mode, the command bar's names) stay English.
+  * The table of Unicode symbols and its hover hints are made from the original's characters
+    (the punctuation of Chinese would otherwise end up in them).
+  The end-to-end test reads a translated page, follows the language buttons, opens an exercise
+  from a translated page (the editor is the main site's) and reads one offline.
 
 ## Known gaps
 
@@ -162,3 +193,8 @@ run yet.
   agda-mode's "compute normal form", which is `C-c C-n` there, a key a browser keeps for
   a new window.
 * The sidebar's activity/streak display of the old site is not reimplemented.
+* The translation: a translated page is available offline only once it has been read, and
+  its progress is kept apart from the English site's. Of the translation's exercises only
+  the first of the Booleans page and the first of the Operators page (which imports another
+  module of the translation) have been opened in the editor and checked by Agda (end-to-end
+  test); the rest has the same code as the original, but nothing has checked every one.

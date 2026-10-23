@@ -45,6 +45,8 @@ const SERVED = path.join(root, '.cache', 'e2e-dist');
 
 const MODULE = 'Padova2025.ProgrammingBasics.Booleans';
 const PAGE = `${URL_}Padova2025.ProgrammingBasics.Booleans.html`;
+const ZH_MODULE = 'Padova2025-zh-TW.ProgrammingBasics.Booleans';
+const ZH_PAGE = `${URL_}zh-TW/${ZH_MODULE}.html`;
 const SOLVED_KEY = `lpa:solved:${MODULE}/1`;
 
 const t0 = Date.now();
@@ -193,6 +195,7 @@ try {
   await page.goto(URL_);
   await page.waitForSelector('#content');
   check('welcome page renders with the table of contents', (await page.locator('.toc li.page a').count()) > 50);
+  check('the English pages link to their translation', (await page.getAttribute('a.lang-switch', 'href')) === 'zh-TW/index.html');
 
   // On a phone the page must not be wider than the screen: its title once had non-breaking
   // spaces between the words, so it could not wrap, and pushed the whole page out to the right.
@@ -550,6 +553,53 @@ try {
   log('caches (name: entries):', JSON.stringify(dump));
   check('old caches are removed, the (unchanged) VS Code files stay cached', cleaned, Object.keys(dump).join(', '));
 
+  // ---- 4c. the translation (zh-TW), a site of its own in a directory of this one ------------------
+  log('--- 4c. the translation');
+  await page.goto(ZH_PAGE);
+  await page.waitForSelector('#exercise-1');
+  check('a translated page: language, title and heading are Chinese',
+    (await page.getAttribute('html', 'lang')) === 'zh-Hant-TW' && /^布林值/.test(await page.title()) && (await page.locator('#content h1').innerText()).startsWith('布林值'));
+  check('its sections keep the ids of the original (links and bookmarks work in both)',
+    (await page.locator('#content h2#example-constants').innerText()).includes('範例：常數'));
+  check('the words around the tutorial are Chinese, too',
+    (await page.locator('#exercise-1 .badge').innerText()) === '習題 1' && (await page.locator('.pager .next span').innerText()) === '下一頁'
+    && (await page.getAttribute('#search', 'placeholder')) === '搜尋…' && (await page.locator('#exercise-2 details.solution > summary').innerText()) === '參考解答');
+  check('a hint that is folded away offers to be shown, in Chinese', (await page.locator('.collapse-toggle').first().innerText()).includes('顯示'));
+  check('the prose is translated, the code is the original (module name with the translation\'s prefix)',
+    (await page.locator('#content pre.agda').first().innerText()).includes('module Padova2025-zh-TW.ProgrammingBasics.Booleans'));
+  check('the table of contents lists the translation\'s pages', (await page.locator('.toc li.page a').count()) > 50
+    && (await page.locator(`.toc li.page a[data-module="${ZH_MODULE}"]`).innerText()) === '布林值');
+  // the link to the page in the other language is a page load of its own, to the same page
+  const toEnglish = page.locator('a.lang-switch');
+  check('the translation links to the same page in English', (await toEnglish.getAttribute('href')) === '../Padova2025.ProgrammingBasics.Booleans.html', await toEnglish.getAttribute('href'));
+  await Promise.all([page.waitForEvent('load'), toEnglish.click()]);
+  check('and that link goes to the English page', page.url() === PAGE && (await page.getAttribute('html', 'lang')) === 'en', page.url());
+  check('which links back to the translation', (await page.getAttribute('a.lang-switch', 'href')) === `zh-TW/${ZH_MODULE}.html`);
+  // the editor is the main site's (../editor/), and opens the exercise of the page it was asked on
+  await page.goto(ZH_PAGE);
+  await page.waitForSelector('#exercise-1');
+  await openExercise(page);
+  await waitFor('editor iframe (translation)', async () => editorFrame(page), 60);
+  check('the editor of a translated page is the main site\'s', new URL(editorFrame(page).url()).pathname === `${BASE}editor/`, editorFrame(page).url());
+  await waitFor('exercise file (translation)', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="/Exercise-zh-TW/ProgrammingBasics/Booleans/Ex1.agda"]').count()) > 0, 120);
+  const fromTranslation = await waitAgda(page, /All Done|All Goals|Error/, 240);
+  check('Agda checks the exercise opened from a translated page', /All Done|All Goals/.test(fromTranslation), fromTranslation.slice(0, 80));
+  // the exercise file is the translation's: its comments are Chinese, and it is of the translation's module
+  const zhText = await editorText(page);
+  check('the file in the editor is the translation\'s: Chinese comment, module of the translation', /輸入/.test(zhText) && /idBool/.test(zhText), zhText.replace(/\s+/g, ' ').slice(0, 90));
+  // an exercise of a module that imports another module of the translation: Agda finds it through the library file at the root
+  await page.click(`a[data-module="Padova2025-zh-TW.ProgrammingBasics.Operators"]`);
+  await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025-zh-TW.ProgrammingBasics.Operators');
+  await openExercise(page);
+  await waitFor('exercise file (translation, with imports)', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="/Exercise-zh-TW/ProgrammingBasics/Operators/Ex1.agda"]').count()) > 0, 120);
+  const withImports = await waitAgdaChange(page, fromTranslation, /All Done|All Goals|Error/, 240);
+  // (an exercise that has not been solved has holes, and its tests cannot be checked yet: Agda lists the two goals
+  // and one error, unsolved constraints; what would be wrong is a module that is not found, or named otherwise than its file)
+  check('Agda checks an exercise whose module imports the translation\'s other modules: it lists the goals',
+    /\?0 : Bool/.test(withImports) && /\?1 : Bool/.test(withImports) && !/Failed to find source|does not match|Not in scope|should be|not found/i.test(withImports),
+    withImports.slice(0, 300));
+  await page.screenshot({ path: path.join(OUT, '4c-translation.png') });
+
   // ---- 5. offline ---------------------------------------------------------
   log('--- 5. server stopped');
   await page.close();
@@ -562,6 +612,9 @@ try {
   await page.click('a[data-module="Padova2025.ProgrammingBasics.Operators"]');
   await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.ProgrammingBasics.Operators', null, { timeout: 15000 });
   check('and other pages work offline, too', true);
+  await page.goto(ZH_PAGE);
+  await page.waitForSelector('#exercise-1', { timeout: 30000 });
+  check('a translated page that was read before loads offline, too', true);
   await page.goto(PAGE);
   await page.waitForSelector('#exercise-1');
   await openExercise(page);

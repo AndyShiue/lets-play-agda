@@ -170,6 +170,11 @@ for (const name of fs.readdirSync(ext)) {
 console.log('• workspace');
 const ws = path.join(out, 'workspace');
 copy(path.join(repoRoot, 'Padova2025'), path.join(ws, 'Padova2025'), (r) => !r.endsWith('.agdai'));
+// the translation: its modules are `Padova2025-zh-TW.…`, found by Agda through the same library file
+// (its own padova2025-zh-TW.agda-lib is not needed: Agda finds a file's library from the module name)
+if (fs.existsSync(path.join(repoRoot, 'Padova2025-zh-TW'))) {
+  copy(path.join(repoRoot, 'Padova2025-zh-TW'), path.join(ws, 'Padova2025-zh-TW'), (r) => !r.endsWith('.agdai') && !r.endsWith('.agda-lib'));
+}
 fs.copyFileSync(path.join(repoRoot, 'padova2025.agda-lib'), path.join(ws, 'padova2025.agda-lib'));
 copy(inputs.cubical, path.join(ws, 'cubical'), (r) =>
   r === '' || r === 'cubical.agda-lib' || r === 'LICENSE' || r === 'Cubical' || (r.startsWith('Cubical/') && !r.endsWith('.agdai')));
@@ -182,7 +187,7 @@ fs.writeFileSync(path.join(out, 'workspace-settings.json'), JSON.stringify({
   'alsWasmLoader.libraryFilePaths': ['cubical/cubical.agda-lib'],
   // The tutorial's own modules and the library are needed by Agda, but are not
   // for browsing (they contain the solutions); exercises live in Exercise/.
-  'files.exclude': { Padova2025: true, cubical: true, '.vscode': true, 'padova2025.agda-lib': true },
+  'files.exclude': { Padova2025: true, 'Padova2025-zh-TW': true, cubical: true, '.vscode': true, 'padova2025.agda-lib': true },
   'files.autoSave': 'afterDelay',
   'files.autoSaveDelay': 800,
 }, null, 2) + '\n');

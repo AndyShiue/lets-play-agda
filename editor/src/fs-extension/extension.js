@@ -179,9 +179,10 @@ class WorkspaceFileSystem {
       // VS Code asks for such a file when it restores the tabs of a previous
       // session (after the editor was restarted or the page reloaded), before the
       // page has asked for the exercise.
-      const exercise = /^\/Exercise\/(.+)\/Ex(\d+)\.agda$/.exec(path);
+      // (the translation's exercises live under Exercise-zh-TW/, and are of its modules)
+      const exercise = Exercises.exerciseSourceModule(path);
       if (exercise) {
-        await this.materializeExercise('Padova2025.' + exercise[1].replace(/\//g, '.'), Number(exercise[2])).catch(() => {});
+        await this.materializeExercise(exercise.moduleName, exercise.ordinal).catch(() => {});
         node = this.nodes.get(path);
       }
     }

@@ -96,3 +96,17 @@ test('the reference solution display drops the markers and the tests', () => {
   const code = 'f : ℕ\nf = {--}zero{--}\n\n-- Tests\n-- EX: f ≡ zero\n';
   assert.equal(ex.solutionDisplay(code), 'f : ℕ\nf = zero\n');
 });
+
+test('a translation has exercise modules of its own, in its own language, with its own equality for the tests', () => {
+  const zh = 'Padova2025-zh-TW.Test';
+  assert.equal(ex.exerciseModuleName(zh, 2), 'Exercise-zh-TW.Test.Ex2');
+  assert.equal(ex.exercisePath(zh, 2), '/Exercise-zh-TW/Test/Ex2.agda');
+  assert.deepEqual(ex.exerciseSourceModule('/Exercise-zh-TW/A/B/Ex3.agda'), { moduleName: 'Padova2025-zh-TW.A.B', ordinal: 3 });
+  assert.deepEqual(ex.exerciseSourceModule('/Exercise/A/B/Ex3.agda'), { moduleName: 'Padova2025.A.B', ordinal: 3 });
+  assert.equal(ex.exerciseSourceModule('/lpa/other.agda'), null);
+  assert.match(ex.expandTests('-- EX: a ≡ b\n', zh), /open import Padova2025-zh-TW\.ProvingBasics\.Equality\.Base\n/);
+  const source = '```\nmodule Padova2025-zh-TW.Test (⊥ : Set) where\n```\n```\nx : Set\nx = {--}?{--}\n\n-- Tests\n-- EX: x ≡ x\n```\n';
+  const text = exerciseFile(source, zh);
+  assert.match(text, /^module Exercise-zh-TW\.Test\.Ex1 \(⊥ : Set\) where/m);
+  assert.match(text, /open import Padova2025-zh-TW\.ProvingBasics\.Equality\.Base/);
+});

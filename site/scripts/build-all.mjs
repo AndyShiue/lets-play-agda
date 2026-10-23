@@ -54,8 +54,24 @@ run(path.join(repo, 'editor', 'scripts', 'build-site.mjs'), [
 
 console.log('\n== site');
 const agdaModeArg = forwarded.indexOf('--agda-mode');
-run(path.join(root, 'scripts', 'build.mjs'), [
-  '--editor-dist', editorDist, '--build-id', buildId,
+const siteArgs = [
+  '--build-id', buildId,
   ...(agdaModeArg >= 0 ? ['--agda-mode', forwarded[agdaModeArg + 1]] : []),
   ...(strict ? ['--strict'] : []),
+];
+const translation = path.join(repo, 'Padova2025-zh-TW');
+const hasTranslation = fs.existsSync(translation);
+run(path.join(root, 'scripts', 'build.mjs'), [
+  '--editor-dist', editorDist, ...siteArgs,
+  ...(hasTranslation ? ['--alternate', 'zh-TW/', '--alternate-label', '繁中'] : []),
 ]);
+
+// The Traditional Chinese translation: a site of its own in a directory of the main one (/zh-TW/), with the
+// editor and the service worker of the main site (the pages are the same, so is the Agda code).
+if (hasTranslation) {
+  console.log('\n== site, zh-TW');
+  run(path.join(root, 'scripts', 'build.mjs'), [
+    '--lang', 'zh-TW', '--source', translation, '--out', path.join(root, 'dist', 'zh-TW'), '--root', '../', '--with-editor',
+    '--alternate', '../', '--alternate-label', 'EN', ...siteArgs,
+  ]);
+}

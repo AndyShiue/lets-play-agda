@@ -184,11 +184,13 @@ function heading(level, raw, env) {
   const title = level === 1 ? splitTitle(raw).heading : raw;
   const html = inline(title, env);
   const plain = plainText(html);
-  let id = slugify(plain);
-  for (let k = 1; env.usedIds.has(id); k++) id = slugify(plain) + '-' + k;
+  // a translated page keeps the ids of the original's headings (env.headingIds), so that the links to a section work in both
+  const base = env.headingIds?.[env.headings.length] ?? slugify(plain);
+  let id = base;
+  for (let k = 1; env.usedIds.has(id); k++) id = base + '-' + k;
   env.usedIds.add(id);
   env.headings.push({ level, text: plain, id });
-  return `<h${level} id="${id}">${html}<a class="anchor" href="#${id}" aria-label="Link to this section">#</a></h${level}>\n`;
+  return `<h${level} id="${id}">${html}<a class="anchor" href="#${id}" aria-label="${escAttr(env.anchorLabel ?? 'Link to this section')}">#</a></h${level}>\n`;
 }
 
 function table(lines, i, env) {

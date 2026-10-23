@@ -30,6 +30,16 @@ const option = (name, fallback) => {
 };
 const out = path.resolve(process.cwd(), option('out', path.join(root, 'dist')));
 const editorDist = option('editor-dist');
+// A translation (zh-TW) is a site of its own in a directory of the main one: the same pages under the
+// same names, the editor and the service worker of the main site (--root: from a page to its root).
+const lang = option('lang', 'en');
+const originalDir = path.join(repo, 'Padova2025');
+const sourceDir = path.resolve(process.cwd(), option('source', originalDir));
+const siteRoot = option('root', './');
+const standalone = siteRoot === './';
+const withEditor = !!editorDist || argv.includes('--with-editor');
+const alternate = option('alternate'); // where the same page is in the other language, from a page, and what to call it
+const alternateLabel = option('alternate-label', '');
 // agda-mode's data about the Unicode input method (for the hover hints), if available
 const agdaModeDir = path.resolve(process.cwd(), option('agda-mode', path.join(repo, 'editor', '.cache', 'ext', 'agda-mode')));
 const strict = argv.includes('--strict');
@@ -37,7 +47,37 @@ const strict = argv.includes('--strict');
 const SITE_NAME = "Let's play Agda";
 const REPO_URL = 'https://github.com/AndyShiue/lets-play-agda';
 const UPSTREAM_URL = 'https://github.com/iblech/lets-play-agda';
-const SKIP_IN_TOC = new Set(['Padova2025.ProvingBasics.Equality.Reasoning.Core', 'Agda.Primitive']);
+// The pages are named after the modules, and a translation's modules have a prefix of their own
+// (`Padova2025-zh-TW.ProgrammingBasics.Booleans`), so its pages, links and exercises are its own.
+const PREFIX = lang === 'zh-TW' ? 'Padova2025-zh-TW' : 'Padova2025';
+const OTHER_PREFIX = lang === 'zh-TW' ? 'Padova2025' : 'Padova2025-zh-TW';
+const SKIP_IN_TOC = new Set([`${PREFIX}.ProvingBasics.Equality.Reasoning.Core`, 'Agda.Primitive']);
+
+// The words of the page around the tutorial (the tutorial's own text is in the source files).
+// The script (src/app.js) has its own, for what it shows.
+const UI = lang === 'zh-TW' ? {
+  exercise: '習題', editHole: '✏️ Edit hole…', editHoleTitle: '開啟編輯器，編輯這個習題的 hole',
+  uses: '參考解答用到：', hintTitle: '點一下顯示；再點一下前往它的宣告處',
+  yourSolution: '你的解答', referenceSolution: '參考解答',
+  prev: '上一頁', next: '下一頁', pager: '上一頁與下一頁',
+  navToggle: '顯示或隱藏目錄', searchPlaceholder: '搜尋…', searchLabel: '搜尋教學', themeToggle: '切換深色模式',
+  editorToggle: '顯示或隱藏編輯器', toc: '目錄', backup: '下載備份', restore: '還原',
+  editor: '編輯器', resize: '拖曳以調整大小',
+  commandsTitle: '把 Agda 指令做成按鈕（載入、case split、give 等）', commands: 'Agda 指令',
+  symbolsTitle: '符號列：輸入反斜線與幾個字母，再點選符號', symbols: '符號列', symbolsGroup: '符號',
+  restart: '重新啟動編輯器', close: '關閉編輯器', wip: '施工中', anchor: '連結到這一節',
+} : {
+  exercise: 'Exercise', editHole: '✏️ Edit hole…', editHoleTitle: '',
+  uses: 'The reference solution uses:', hintTitle: 'Click to show; click again to go to its declaration',
+  yourSolution: 'Your solution', referenceSolution: 'Reference solution',
+  prev: 'Previous', next: 'Next', pager: 'Previous and next page',
+  navToggle: 'Show or hide the table of contents', searchPlaceholder: 'Search…', searchLabel: 'Search the tutorial', themeToggle: 'Toggle dark mode',
+  editorToggle: 'Show or hide the editor', toc: 'Table of contents', backup: 'Download backup', restore: 'Restore',
+  editor: 'Editor', resize: 'Drag to resize',
+  commandsTitle: 'Agda commands as buttons (load, case split, give, …)', commands: 'Agda commands',
+  symbolsTitle: 'Symbol bar: type a backslash and a few letters, then tap the symbol', symbols: 'Symbol bar', symbolsGroup: 'Symbols',
+  restart: 'Restart the editor', close: 'Close the editor', wip: 'Under construction', anchor: 'Link to this section',
+};
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escAttr = (s) => esc(s).replace(/"/g, '&quot;');
@@ -47,25 +87,38 @@ const hash = (data) => crypto.createHash('sha256').update(data).digest('hex');
 // 1. read the modules
 // ---------------------------------------------------------------------------
 const modules = new Map();
+/** The ids that the headings of a page get from the original's words: a translated page keeps them, so a link to a section works in both languages. */
+function originalHeadingIds(original) {
+  if (original === undefined) return undefined;
+  const env = { headings: [], usedIds: new Set(), unknownTex: new Set(), rewriteUrl: (url) => ({ href: url }), renderCode: () => '' };
+  renderMarkdown(ex.moduleInfo(original).text, env);
+  return env.headings.map((h) => h.id);
+}
+/** The source of the same page in the original (for a translation). */
+function readOriginal(file) {
+  const original = path.join(originalDir, path.relative(sourceDir, file));
+  return sourceDir !== originalDir && fs.existsSync(original) ? fs.readFileSync(original, 'utf8') : undefined;
+}
 (function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) walk(full);
     else if (entry.name.endsWith('.lagda.md')) {
       const rel = path.relative(repo, full).split(path.sep).join('/');
-      const name = rel.replace(/\.lagda\.md$/, '').replace(/\//g, '.');
+      // the pages are named after the modules: the file's place in the source directory names it
+      const name = PREFIX + '.' + path.relative(sourceDir, full).split(path.sep).join('/').replace(/\.lagda\.md$/, '').replace(/\//g, '.');
       const source = fs.readFileSync(full, 'utf8');
       const info = ex.moduleInfo(source);
-      if (info.name !== name) console.warn(`warning: ${rel} declares module ${info.name}`);
+      if (info.name !== name) console.warn(`warning: ${rel} declares module ${info.name}, not ${name}`);
       const deps = [];
       for (const b of info.blocks) {
-        if (b.kind === 'agda') b.text.replace(/^\s*(?:open\s+)?import\s+([\w.']+)/gm, (_, m) => deps.push(m));
+        if (b.kind === 'agda') b.text.replace(/^\s*(?:open\s+)?import\s+([\w.'-]+)/gm, (_, m) => deps.push(m));
       }
-      modules.set(name, { name, rel, source, info, deps, decls: new Map() });
+      const original = readOriginal(full);
+      modules.set(name, { name, rel, source, original, info, deps, decls: new Map(), headingIds: originalHeadingIds(original) });
     }
   }
-})(path.join(repo, 'Padova2025'));
-
+})(sourceDir);
 for (const mod of modules.values()) {
   for (const b of mod.info.blocks) if (b.kind === 'agda') collectDeclarations(ex.isExercise(b) ? ex.solutionDisplay(b.text) : b.text, mod.decls);
 }
@@ -113,11 +166,11 @@ function buildTree(name, level) {
   if (!node.isSection && !underConstruction && level > 0) order.push(name);
   return node;
 }
-const tree = buildTree('Padova2025.Index', 0);
+const tree = buildTree(`${PREFIX}.Index`, 0);
 const inToc = new Set(seenInToc);
 const orphans = [...modules.keys()].filter((m) => !inToc.has(m));
 
-const hrefOf = (name) => (name === 'Padova2025.Welcome' ? 'index.html' : `${name}.html`);
+const hrefOf = (name) => (/^Padova2025(-zh-TW)?\.Welcome$/.test(name) ? 'index.html' : `${name}.html`);
 
 // ---------------------------------------------------------------------------
 // 3. pages
@@ -131,7 +184,7 @@ function rewriteUrl(from) {
     let m;
     if (/^(https?:|mailto:)/.test(url)) return { href: url, external: true };
     if (/^(javascript:|#)/.test(url)) return { href: url };
-    if ((m = /^(Padova2025\.[\w.']+)\.html(#.*)?$/.exec(url))) {
+    if ((m = /^(Padova2025(?:-zh-TW)?\.[\w.']+)\.html(#.*)?$/.exec(url))) {
       links.push({ from, to: m[1], frag: m[2] ?? '' });
       return { href: hrefOf(m[1]) + (m[2] ?? '') };
     }
@@ -159,10 +212,10 @@ function renderPage(mod, linking = false) {
     return (entry.module === mod.name ? '' : hrefOf(entry.module)) + '#' + encodeURIComponent(entry.name);
   };
   // the module an `import` names: the tutorial's own page, or the documentation of the Cubical library
-  const moduleHref = (name) => {
+  const moduleHref = (written) => {
     if (!linking) return null;
-    if (modules.has(name)) return name === mod.name ? null : hrefOf(name);
-    return /^Cubical\./.test(name) ? `https://agda.github.io/cubical/${name}.html` : null;
+    if (modules.has(written)) return written === mod.name ? null : hrefOf(written);
+    return /^Cubical\./.test(written) ? `https://agda.github.io/cubical/${written}.html` : null;
   };
   const stats = linking ? linkStats : undefined;
 
@@ -171,9 +224,11 @@ function renderPage(mod, linking = false) {
 
   const env = {
     headings: [],
+    headingIds: mod.headingIds,
     usedIds: new Set(),
     unknownTex,
     rewriteUrl: rewriteUrl(mod.name),
+    anchorLabel: UI.anchor,
     renderCode(n) {
       const b = mod.info.blocks[n];
       if (!b || b.hidden) return '';
@@ -190,17 +245,17 @@ function renderPage(mod, linking = false) {
         const own = collectDeclarations(solution);
         const uses = [...solutionRefs].filter(([key, ref]) => !statementRefs.has(key) && !own.has(ref.entry.name));
         const hints = uses.length
-          ? `<div class="hints"><span class="hints-title">The reference solution uses:</span> ${uses.map(([, ref]) =>
-            `<a class="hint ${KIND_CLASS[ref.entry.kind]}" href="${escAttr(ref.href)}" title="Click to show; click again to go to its declaration">${esc(ref.entry.name)}</a>`).join(' ')}</div>\n`
+          ? `<div class="hints"><span class="hints-title">${UI.uses}</span> ${uses.map(([, ref]) =>
+            `<a class="hint ${KIND_CLASS[ref.entry.kind]}" href="${escAttr(ref.href)}" title="${escAttr(UI.hintTitle)}">${esc(ref.entry.name)}</a>`).join(' ')}</div>\n`
           : '';
         return `<section class="exercise" id="exercise-${exercise.ordinal}" data-module="${escAttr(mod.name)}" data-ordinal="${exercise.ordinal}" data-id="${escAttr(exercise.id)}">
-<div class="exercise-head"><span class="badge">Exercise ${exercise.ordinal}</span><code>${esc(exercise.id)}</code></div>
+<div class="exercise-head"><span class="badge">${UI.exercise} ${exercise.ordinal}</span><code>${esc(exercise.id)}</code></div>
 ${pre('agda', statementHtml)}<div class="exercise-actions">
-<button type="button" class="btn primary" data-action="edit">✏️ Edit hole…</button>
+<button type="button" class="btn primary" data-action="edit"${UI.editHoleTitle ? ` title="${escAttr(UI.editHoleTitle)}"` : ''}>${UI.editHole}</button>
 <span class="exercise-status" data-status></span>
 </div>
-${hints}<div class="your-code" hidden><div class="your-code-title">Your solution</div><pre class="agda"><code></code></pre></div>
-<details class="solution"><summary>Reference solution</summary>${pre('agda', solutionHtml)}</details>
+${hints}<div class="your-code" hidden><div class="your-code-title">${UI.yourSolution}</div><pre class="agda"><code></code></pre></div>
+<details class="solution"><summary>${UI.referenceSolution}</summary>${pre('agda', solutionHtml)}</details>
 </section>\n`;
       }
       const header = b === firstAgda && /^\s*(\{-#|module\s)/.test(b.text);
@@ -247,7 +302,7 @@ function renderNav(current) {
       const open = (node.level <= 1 && !node.underConstruction) || ancestors.has(node.module) ? ' open' : '';
       return `<li class="section"><details${open}><summary>${esc(node.label)}</summary><ol>${node.children.map(item).join('')}</ol></details></li>`;
     }
-    if (node.underConstruction) return `<li class="wip">${esc(node.label)} <span class="wip-mark" title="Under construction">🚧</span></li>`;
+    if (node.underConstruction) return `<li class="wip">${esc(node.label)} <span class="wip-mark" title="${UI.wip}">🚧</span></li>`;
     const cur = node.module === current ? ' aria-current="page"' : '';
     return `<li class="page"><a href="${hrefOf(node.module)}" data-module="${escAttr(node.module)}" data-ex="${node.exercises}"${cur}>${esc(node.label)}</a></li>`;
   }
@@ -271,19 +326,25 @@ function layout(mod) {
   const prev = idx > 0 ? order[idx - 1] : null;
   const next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
   const label = (m) => (modules.get(m).info.title?.nav ?? m).replace(/\s*🚧\s*/, '');
-  const pager = `<nav class="pager" aria-label="Previous and next page">
-${prev ? `<a class="prev" href="${hrefOf(prev)}" rel="prev"><span>Previous</span>${esc(label(prev))}</a>` : '<span></span>'}
-${next ? `<a class="next" href="${hrefOf(next)}" rel="next"><span>Next</span>${esc(label(next))}</a>` : '<span></span>'}
+  const pager = `<nav class="pager" aria-label="${UI.pager}">
+${prev ? `<a class="prev" href="${hrefOf(prev)}" rel="prev"><span>${UI.prev}</span>${esc(label(prev))}</a>` : '<span></span>'}
+${next ? `<a class="next" href="${hrefOf(next)}" rel="next"><span>${UI.next}</span>${esc(label(next))}</a>` : '<span></span>'}
 </nav>`;
   const source = `${REPO_URL}/blob/main/${mod.rel}`;
-  const footer = `<footer class="page-footer">
+  const footer = lang === 'zh-TW'
+    ? `<footer class="page-footer">
+<p><a href="${escAttr(source)}" target="_blank" rel="noopener">在 GitHub 上編輯這一頁</a> ·
+內容：<a href="${UPSTREAM_URL}" target="_blank" rel="noopener">${SITE_NAME}</a>，作者 Ingo Blechschmidt，繁體中文翻譯，
+<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh-hant" target="_blank" rel="noopener">CC BY-SA</a>。</p>
+</footer>`
+    : `<footer class="page-footer">
 <p><a href="${escAttr(source)}" target="_blank" rel="noopener">Edit this page on GitHub</a> ·
 Content: <a href="${UPSTREAM_URL}" target="_blank" rel="noopener">${SITE_NAME}</a> by Ingo Blechschmidt,
 <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA</a>.</p>
 </footer>`;
 
   return `<!DOCTYPE html>
-<html lang="en" data-theme="auto">
+<html lang="${lang === 'zh-TW' ? 'zh-Hant-TW' : 'en'}" data-theme="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
@@ -297,16 +358,16 @@ Content: <a href="${UPSTREAM_URL}" target="_blank" rel="noopener">${SITE_NAME}</
 <body>
 <div class="app" id="app">
 <header class="topbar">
-<button type="button" class="icon-btn nav-toggle" aria-label="Show or hide the table of contents" aria-controls="toc-panel">☰</button>
+<button type="button" class="icon-btn nav-toggle" aria-label="${UI.navToggle}" aria-controls="toc-panel">☰</button>
 <a class="brand" href="index.html"><span class="brand-logo">🐔</span><span class="brand-name">${SITE_NAME}</span></a>
-<div class="search"><input type="search" id="search" placeholder="Search…" aria-label="Search the tutorial" autocomplete="off"><div id="search-results" hidden></div></div>
-<button type="button" class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">◐</button>
-<button type="button" class="icon-btn" id="editor-toggle" aria-label="Show or hide the editor" title="Show or hide the editor" aria-pressed="false">⌨</button>
+<div class="search"><input type="search" id="search" placeholder="${UI.searchPlaceholder}" aria-label="${UI.searchLabel}" autocomplete="off"><div id="search-results" hidden></div></div>
+${alternate ? `<a class="icon-btn lang-switch" href="${escAttr(alternate + hrefOf(OTHER_PREFIX + mod.name.slice(PREFIX.length)))}" hreflang="${lang === 'zh-TW' ? 'en' : 'zh-Hant-TW'}" lang="${lang === 'zh-TW' ? 'en' : 'zh-Hant-TW'}" title="${lang === 'zh-TW' ? 'This page in English' : '這一頁的繁體中文版'}">${esc(alternateLabel)}</a>\n` : ''}<button type="button" class="icon-btn" id="theme-toggle" aria-label="${UI.themeToggle}" title="${UI.themeToggle}">◐</button>
+<button type="button" class="icon-btn" id="editor-toggle" aria-label="${UI.editorToggle}" title="${UI.editorToggle}" aria-pressed="false">⌨</button>
 </header>
-<nav class="sidebar" id="toc-panel" aria-label="Table of contents">
+<nav class="sidebar" id="toc-panel" aria-label="${UI.toc}">
 ${renderNav(mod.name)}
 <div class="activity" id="activity" hidden></div>
-<div class="sidebar-foot"><a href="#" data-action="export-progress">Download backup</a> · <a href="#" data-action="import-progress">Restore</a></div>
+<div class="sidebar-foot"><a href="#" data-action="export-progress">${UI.backup}</a> · <a href="#" data-action="import-progress">${UI.restore}</a></div>
 </nav>
 <main id="main">
 <article id="content" data-module="${escAttr(mod.name)}" data-title="${escAttr(plainText(title.nav))}" data-exercises="${mod.info.exercises.length}">
@@ -315,20 +376,20 @@ ${pager}
 ${footer}
 </article>
 </main>
-<aside class="editor-panel" id="editor-panel" aria-label="Editor" hidden>
-<div class="editor-resizer" id="editor-resizer" role="separator" aria-orientation="vertical" title="Drag to resize"></div>
-<div class="editor-bar"><span class="editor-title" id="editor-title">Editor</span>
-<button type="button" class="icon-btn" data-action="commands" title="Agda commands as buttons (load, case split, give, …)" aria-label="Agda commands" aria-pressed="false">λ</button>
-<button type="button" class="icon-btn" data-action="symbols" title="Symbol bar: type a backslash and a few letters, then tap the symbol" aria-label="Symbol bar" aria-pressed="false">∀</button>
-<button type="button" class="icon-btn" data-action="editor-reload" title="Restart the editor" aria-label="Restart the editor">↻</button>
-<button type="button" class="icon-btn" data-action="editor-close" title="Close the editor" aria-label="Close the editor">✕</button></div>
+<aside class="editor-panel" id="editor-panel" aria-label="${UI.editor}" hidden>
+<div class="editor-resizer" id="editor-resizer" role="separator" aria-orientation="vertical" title="${UI.resize}"></div>
+<div class="editor-bar"><span class="editor-title" id="editor-title">${UI.editor}</span>
+<button type="button" class="icon-btn" data-action="commands" title="${UI.commandsTitle}" aria-label="${UI.commands}" aria-pressed="false">λ</button>
+<button type="button" class="icon-btn" data-action="symbols" title="${UI.symbolsTitle}" aria-label="${UI.symbols}" aria-pressed="false">∀</button>
+<button type="button" class="icon-btn" data-action="editor-reload" title="${UI.restart}" aria-label="${UI.restart}">↻</button>
+<button type="button" class="icon-btn" data-action="editor-close" title="${UI.close}" aria-label="${UI.close}">✕</button></div>
 <div class="editor-status" id="editor-status" role="status"></div>
-<div class="symbol-bar" id="symbol-bar" role="toolbar" aria-label="Symbols" hidden></div>
-<div class="command-bar" id="command-bar" role="toolbar" aria-label="Agda commands" hidden></div>
+<div class="symbol-bar" id="symbol-bar" role="toolbar" aria-label="${UI.symbolsGroup}" hidden></div>
+<div class="command-bar" id="command-bar" role="toolbar" aria-label="${UI.commands}" hidden></div>
 </aside>
 <div class="scrim" id="scrim" hidden></div>
 </div>
-<script type="application/json" id="lpa-config">${JSON.stringify({ buildId: BUILD_ID, searchUrl: assets['search'], unicodeUrl: assets['unicode'] ?? null, editor: !!editorDist })}</script>
+<script type="application/json" id="lpa-config">${JSON.stringify({ buildId: BUILD_ID, searchUrl: assets['search'], unicodeUrl: assets['unicode'] ?? null, editor: withEditor, root: siteRoot, lang })}</script>
 </body>
 </html>
 `;
@@ -366,7 +427,8 @@ assets['search'] = searchName;
 try {
   const query = require(path.join(agdaModeDir, 'asset', 'query.js')).default;
   const used = new Set();
-  for (const mod of modules.values()) for (const ch of mod.source) if (ch.codePointAt(0) > 127) used.add(ch);
+  // (a translation has the symbols of the original: its own words would add the punctuation of its language)
+  for (const mod of modules.values()) for (const ch of mod.original ?? mod.source) if (ch.codePointAt(0) > 127) used.add(ch);
   const table = {};
   for (const ch of [...used].sort()) {
     const sequences = query[String(ch.codePointAt(0))];
@@ -397,11 +459,14 @@ if (editorDist) {
   try { staticId = JSON.parse(fs.readFileSync(path.join(path.resolve(process.cwd(), editorDist), 'build-info.json'), 'utf8')).staticId ?? staticId; } catch { /* keep 'none' */ }
 }
 const swCommon = fs.readFileSync(path.join(repo, 'editor', 'src', 'sw-common.js'), 'utf8').replaceAll('__BUILD_ID__', BUILD_ID).replaceAll('__STATIC_ID__', staticId);
-fs.writeFileSync(path.join(out, 'sw-common.js'), swCommon);
-fs.writeFileSync(path.join(out, 'sw.js'), fs.readFileSync(path.join(repo, 'editor', 'src', 'sw.js'), 'utf8')
-  .replaceAll('__BUILD_ID__', BUILD_ID)
-  .replaceAll('__STATIC_ID__', staticId)
-  .replaceAll('__PRECACHE__', () => JSON.stringify(precache, null, 2)));
+// (a translation in a directory of the main site has none: the main site's covers it)
+if (standalone) {
+  fs.writeFileSync(path.join(out, 'sw-common.js'), swCommon);
+  fs.writeFileSync(path.join(out, 'sw.js'), fs.readFileSync(path.join(repo, 'editor', 'src', 'sw.js'), 'utf8')
+    .replaceAll('__BUILD_ID__', BUILD_ID)
+    .replaceAll('__STATIC_ID__', staticId)
+    .replaceAll('__PRECACHE__', () => JSON.stringify(precache, null, 2)));
+}
 
 // The Agda files as archives, for working with a local Agda: with holes (the
 // exercises as the pages show them) and with the solutions.
@@ -421,17 +486,19 @@ function exerciseSource(mod) {
   return result.join('\n');
 }
 {
+  // (a translation's archives hold its folder; the library file at the root finds its modules, too)
   const files = [...modules.values()].sort((a, b) => (a.rel < b.rel ? -1 : 1));
   const agdaLib = { name: 'padova2025.agda-lib', data: fs.readFileSync(path.join(repo, 'padova2025.agda-lib')) };
-  fs.writeFileSync(path.join(out, 'Padova2025.zip'), createZip([...files.map((m) => ({ name: m.rel, data: Buffer.from(exerciseSource(m)) })), agdaLib]));
-  fs.writeFileSync(path.join(out, 'Padova2025-solutions.zip'), createZip([...files.map((m) => ({ name: m.rel, data: Buffer.from(m.source) })), agdaLib]));
+  fs.writeFileSync(path.join(out, `${PREFIX}.zip`), createZip([...files.map((m) => ({ name: m.rel, data: Buffer.from(exerciseSource(m)) })), agdaLib]));
+  fs.writeFileSync(path.join(out, `${PREFIX}-solutions.zip`), createZip([...files.map((m) => ({ name: m.rel, data: Buffer.from(m.source) })), agdaLib]));
 }
+if (standalone) {
+  fs.writeFileSync(path.join(out, '.nojekyll'), '');
+  fs.writeFileSync(path.join(out, '404.html'), `<!DOCTYPE html><meta charset="utf-8"><title>Not found</title><meta name="viewport" content="width=device-width, initial-scale=1"><body style="font:18px system-ui;max-width:32em;margin:4em auto;padding:0 1em"><h1>Page not found</h1><p><a href="index.html">Back to the tutorial</a></p>`);
 
-fs.writeFileSync(path.join(out, '.nojekyll'), '');
-fs.writeFileSync(path.join(out, '404.html'), `<!DOCTYPE html><meta charset="utf-8"><title>Not found</title><meta name="viewport" content="width=device-width, initial-scale=1"><body style="font:18px system-ui;max-width:32em;margin:4em auto;padding:0 1em"><h1>Page not found</h1><p><a href="index.html">Back to the tutorial</a></p>`);
-
-if (editorDist) {
-  fs.cpSync(path.resolve(process.cwd(), editorDist), path.join(out, 'editor'), { recursive: true });
+  if (editorDist) {
+    fs.cpSync(path.resolve(process.cwd(), editorDist), path.join(out, 'editor'), { recursive: true });
+  }
 }
 
 // ---------------------------------------------------------------------------

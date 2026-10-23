@@ -135,14 +135,36 @@
       .replace(/\n+$/, '\n');
   }
 
-  /** `-- EX: <claim>` lines become checked-by-refl declarations. */
-  function expandTests(tests) {
+  /**
+   * The tutorial's modules are `Padova2025.…`; the translation's are `Padova2025-zh-TW.…`, and
+   * everything that is derived from one is derived in the same language.
+   * @returns {{ prefix: string, rest: string, exercisePrefix: string }}
+   */
+  function splitModuleName(moduleName) {
+    const translated = /^Padova2025-zh-TW\./.test(moduleName);
+    return {
+      prefix: translated ? 'Padova2025-zh-TW' : 'Padova2025',
+      rest: moduleName.replace(/^Padova2025(-zh-TW)?\./, ''),
+      exercisePrefix: translated ? 'Exercise-zh-TW' : 'Exercise',
+    };
+  }
+
+  /** `-- EX: <claim>` lines become checked-by-refl declarations (with the equality of the same language). */
+  function expandTests(tests, moduleName) {
+    const { prefix } = splitModuleName(moduleName ?? 'Padova2025.');
     return tests.replace(/^--\s*EX:\s*(.*)$/gm,
-      'module _ where private\n  open import Padova2025.ProvingBasics.Equality.Base\n  exercise-test : $1\n  exercise-test = refl\n');
+      `module _ where private\n  open import ${prefix}.ProvingBasics.Equality.Base\n  exercise-test : $1\n  exercise-test = refl\n`);
   }
 
   function exerciseModuleName(moduleName, ordinal) {
-    return 'Exercise.' + moduleName.replace(/^Padova2025\./, '') + '.Ex' + ordinal;
+    const { exercisePrefix, rest } = splitModuleName(moduleName);
+    return exercisePrefix + '.' + rest + '.Ex' + ordinal;
+  }
+
+  /** The module of the tutorial that an exercise file `/Exercise[-zh-TW]/<Chapter>/<Module>/Ex<n>.agda` is of. */
+  function exerciseSourceModule(path) {
+    const m = /^\/Exercise(-zh-TW)?\/(.+)\/Ex(\d+)\.agda$/.exec(path);
+    return m ? { moduleName: (m[1] ? 'Padova2025-zh-TW.' : 'Padova2025.') + m[2].replace(/\//g, '.'), ordinal: Number(m[3]) } : null;
   }
 
   function exercisePath(moduleName, ordinal) {
@@ -181,10 +203,10 @@
         ({ shown, tests } = holeify(b.text));
       }
       text += '-- EXERCISE STARTS HERE\n' + shown + '-- EXERCISE ENDS\n';
-      if (tests) text += '\n' + expandTests(tests);
+      if (tests) text += '\n' + expandTests(tests, moduleName);
     }
     // only the name: the module may have parameters, `module X (A : Set) where`
-    text = text.replace(/^module\s+[\w.']+(?=[\s({])/m, 'module ' + exerciseModuleName(moduleName, ordinal));
+    text = text.replace(/^module\s+[\w.'-]+(?=[\s({])/m, 'module ' + exerciseModuleName(moduleName, ordinal));
 
     const lines = text.split('\n');
     return {
@@ -207,9 +229,9 @@
     const { blocks, text } = splitModule(source);
     const heading = /^#\s+(.*?)\s*$/m.exec(text);
     const agda = blocks.filter((b) => b.kind === 'agda').map((b) => b.text).join('\n');
-    const name = /^module\s+([\w.']+)(?=[\s({])/m.exec(agda);
+    const name = /^module\s+([\w.'-]+)(?=[\s({])/m.exec(agda); // (a translation's modules have a hyphen: Padova2025-zh-TW.…)
     const imports = [];
-    agda.replace(/^import\s+([\w.']+)/gm, (_, m) => imports.push(m));
+    agda.replace(/^import\s+([\w.'-]+)/gm, (_, m) => imports.push(m));
     return {
       blocks,
       text,
@@ -230,6 +252,8 @@
     holeify,
     solutionDisplay,
     expandTests,
+    splitModuleName,
+    exerciseSourceModule,
     exerciseModuleName,
     exercisePath,
     buildExerciseFile,
