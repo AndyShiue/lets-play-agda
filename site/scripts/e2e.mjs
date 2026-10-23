@@ -194,6 +194,14 @@ try {
   await page.waitForSelector('#content');
   check('welcome page renders with the table of contents', (await page.locator('.toc li.page a').count()) > 50);
 
+  // On a phone the page must not be wider than the screen: its title once had non-breaking
+  // spaces between the words, so it could not wrap, and pushed the whole page out to the right.
+  await page.setViewportSize({ width: 412, height: 839 });
+  const tooWide = await page.evaluate(() => { const m = document.querySelector('#main'); return m.scrollWidth - m.clientWidth; });
+  check('the Welcome page does not stick out of a phone-sized screen', tooWide <= 1, `${tooWide}px too wide`);
+  await page.setViewportSize({ width: 1360, height: 900 });
+  check('the list of theorems on the Welcome page is a code block, with its links', (await page.locator('#content pre.code a[href*="grande-teorema"]').count()) === 1);
+
   await page.click('a[data-module="' + MODULE + '"]');
   await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, MODULE);
   check('navigation without reload (URL changed, sidebar follows)', page.url().endsWith('Padova2025.ProgrammingBasics.Booleans.html') && (await page.getAttribute('.toc a[aria-current="page"]', 'data-module')) === MODULE);
