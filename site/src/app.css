@@ -145,7 +145,7 @@ pre.agda .decl { position: absolute; margin-top: -4.5rem; }
 .mo { color: var(--nu); } /* the module of an import: purple, as in Agda's own highlighting */
 .hole { background: var(--hole-bg); color: var(--hole-fg); border-radius: .2rem; padding: 0 .15em; }
 .copy-btn { position: absolute; top: .4rem; right: .4rem; opacity: 0; font: .75rem var(--font); border: 1px solid var(--line); background: var(--bg); border-radius: .4rem; padding: .15rem .5rem; cursor: pointer; color: var(--muted); }
-pre:hover .copy-btn, .copy-btn:focus { opacity: 1; }
+.code-wrap:hover .copy-btn, .copy-btn:focus { opacity: 1; }
 
 /* ---- exercises ------------------------------------------------------- */
 .exercise { margin: 1.6rem 0; padding: .9rem 1rem 1rem; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: .6rem; background: var(--bg-soft); }
@@ -174,6 +174,11 @@ pre.agda a:hover { text-decoration: underline; text-underline-offset: .15em; }
 details.solution { margin-top: .8rem; }
 details.solution > summary { cursor: pointer; padding: .2rem 0; }
 .your-code pre, details.solution pre { margin: .5rem 0 0; }
+/* a block with a copy button is in a box (see enhance in app.js): the box has the block's margins, the block none */
+.code-wrap { position: relative; margin: 1rem 0; }
+.exercise .code-wrap { margin: .7rem 0; }
+.your-code .code-wrap, details.solution .code-wrap { margin: .5rem 0 0; }
+.code-wrap > pre.agda, .code-wrap > pre.code { margin: 0; }
 
 /* ---- callouts -------------------------------------------------------- */
 .Aside, .Hint, .More, .Todo { margin: 1.2rem 0; padding: .1rem 1rem; border-radius: .6rem; border: 1px solid var(--line); }

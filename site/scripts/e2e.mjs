@@ -211,6 +211,31 @@ try {
   check('page has its 3 exercises', (await page.locator('.exercise').count()) === 3);
   await page.screenshot({ path: path.join(OUT, '1-reading.png') });
 
+  // The copy button stays in the top right corner of the frame of a code block, also when a long line
+  // has scrolled the code sideways (it was in the block itself once, and went with the text).
+  {
+    const narrow = await context.newPage();
+    await narrow.setViewportSize({ width: 412, height: 839 });
+    await narrow.goto(`${URL_}Padova2025.VerifiedAlgorithms.PL.html`);
+    await narrow.waitForSelector('.code-wrap > pre.agda');
+    const corner = await narrow.evaluate(() => {
+      const pre = [...document.querySelectorAll('.code-wrap > pre.agda')].find((p) => p.scrollWidth > p.clientWidth + 40);
+      if (!pre) return null;
+      pre.scrollIntoView({ block: 'center' });
+      pre.scrollLeft = pre.scrollWidth;
+      const button = pre.parentElement.querySelector('.copy-btn');
+      button.style.opacity = '1'; // (as when the pointer is over the block)
+      const frame = pre.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      return { scrolled: Math.round(pre.scrollLeft), fromRight: Math.round(frame.right - b.right), fromTop: Math.round(b.top - frame.top) };
+    });
+    check('the copy button is in the top right corner of the frame, also with the code scrolled sideways',
+      !!corner && corner.scrolled > 0 && corner.fromRight >= 0 && corner.fromRight <= 12 && corner.fromTop >= 0 && corner.fromTop <= 12, JSON.stringify(corner));
+    check('what the button copies is the code (the button is not part of the block)', !(await narrow.locator('.code-wrap > pre.agda').first().innerText()).includes('Copy'));
+    await narrow.screenshot({ path: path.join(OUT, '1-copy-button.png') });
+    await narrow.close();
+  }
+
   await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 60000 });
   check('service worker controls the page', true);
 
@@ -325,7 +350,7 @@ try {
   await sleep(500);
   // without whitespace: the editor wraps long lines, and the page's block has a "Copy" button
   const norm = (s) => s.replace(/\s+/g, '');
-  const pageCode = norm(await page.locator('#exercise-1 > pre.agda').first().innerText()).replace(/Copy$/, '');
+  const pageCode = norm(await page.locator('#exercise-1 pre.agda').first().innerText());
   // (besides the exercise, the two lines the folds hang on)
   const editorCode = norm((await editorText(page)).replace('-- EXERCISE STARTS', '').replace('-- EXERCISE ENDS', ''));
   const visibleLines = (await editorText(page)).split('\n').map((line) => line.trim()).filter(Boolean);

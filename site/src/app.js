@@ -221,12 +221,17 @@
     if (!Number(content.dataset.exercises)) store.set(`lpa:visited:${module}`, '1');
 
     for (const pre of $$('pre.agda:not(.header), pre.code', content)) {
+      // The button is on a box around the block, not in it: a long line scrolls the block sideways,
+      // and a button inside would go with the text instead of staying in the corner of the frame
+      // (nor would it be part of what is copied, which is the text of the block).
+      const wrap = Object.assign(document.createElement('div'), { className: 'code-wrap' });
+      pre.replaceWith(wrap);
       const button = Object.assign(document.createElement('button'), { type: 'button', className: 'copy-btn', textContent: t('copy') });
       button.addEventListener('click', async () => {
         try { await navigator.clipboard.writeText(pre.innerText); button.textContent = t('copied'); } catch { button.textContent = t('pressCtrlC'); }
         setTimeout(() => { button.textContent = t('copy'); }, 1500);
       });
-      pre.append(button);
+      wrap.append(pre, button);
     }
 
     // hints and "more" sections start folded, as in a textbook's answer section
