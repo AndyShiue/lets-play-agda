@@ -174,12 +174,36 @@ try {
   await page.waitForFunction(() => navigator.serviceWorker.controller, null, { timeout: 60000 });
   check('service worker controls the page', true);
 
+  // the reference solution is asked for BEFORE it is shown
+  await page.evaluate(() => {
+    const box = document.querySelector('#exercise-2 details.solution');
+    const ask = window.confirm;
+    window.__asked = [];
+    window.confirm = (message) => { window.__asked.push(box.open); return ask.call(window, message); };
+  });
+  page.once('dialog', (dialog) => dialog.dismiss());
+  await page.click('#exercise-2 details.solution > summary');
+  check('declining the question keeps the reference solution closed', !(await page.$eval('#exercise-2 details.solution', (d) => d.open)));
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.click('#exercise-2 details.solution > summary');
+  check('agreeing opens it, and the question came while it was still closed',
+    (await page.$eval('#exercise-2 details.solution', (d) => d.open)) && (await page.evaluate(() => window.__asked)).every((open) => open === false));
+
   await page.click('a[data-module="Padova2025.Welcome.About"]');
   await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.Welcome.About');
   await page.waitForFunction(() => document.querySelectorAll('#char-table tr').length > 20, null, { timeout: 10000 });
   check('the About page lists the Unicode symbols with their key sequences', true);
   await page.click('a[data-module="' + MODULE + '"]');
   await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, MODULE);
+
+  // ---- 1b. the editor button, before any exercise --------------------------
+  log('--- 1b. open the editor without an exercise');
+  await page.click('#editor-toggle');
+  await page.waitForFunction(() => crossOriginIsolated, null, { timeout: 60000 });
+  await waitFor('VS Code workbench', async () => editorFrame(page) && (await editorFrame(page).locator('.monaco-workbench').count()) > 0, 120);
+  await sleep(1500);
+  check('the editor opens by itself, with no error message', (await editorFrame(page).locator('#lpa-status.error').count()) === 0
+    && (await page.locator('#app.editor-open').count()) === 1);
 
   // ---- 2. open the exercise ----------------------------------------------
   log('--- 2. open the exercise (isolation reload, VS Code, Agda)');
@@ -229,6 +253,22 @@ try {
   check('reopening the exercise restores the reader\'s code', /idBool x = x/.test(await editorText(page)));
   const again = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('Agda checks the restored file: All Done', /All Done/.test(again), again.slice(0, 80));
+
+  // restarting the editor (the button in its bar): the exercise must come back
+  await page.click('[data-action="editor-reload"]');
+  await waitFor('the exercise file after the restart', async () => editorFrame(page) && (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
+  await sleep(1500);
+  check('restarting the editor brings the exercise back, with the reader\'s code', /idBool x = x/.test(await editorText(page)));
+  const restarted = await waitAgda(page, /All Done|All Goals|Error/, 240);
+  check('and Agda checks it again', /All Done/.test(restarted), restarted.slice(0, 80));
+
+  // reloading the whole page with the editor open
+  await page.reload();
+  await page.waitForSelector('#exercise-1');
+  await waitFor('the editor to come back', async () => (await page.locator('#app.editor-open').count()) === 1 && editorFrame(page), 30);
+  await waitFor('the exercise file after reloading the page', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
+  await sleep(1500);
+  check('reloading the page brings the editor back with the exercise', /idBool x = x/.test(await editorText(page)));
   await page.close();
 
   // ---- 4b. a new deployment reaches a returning visitor --------------------
@@ -253,10 +293,20 @@ try {
   await waitFor('exercise file', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
   const afterUpdate = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('the editor works after the update', /All Done/.test(afterUpdate), afterUpdate.slice(0, 80));
-  // by now both workers (the site's and the webview's) are the new ones
-  const cacheNames = await page.evaluate(() => caches.keys()).catch(() => []);
-  check('old caches are removed, the (unchanged) VS Code files stay cached',
-    cacheNames.some((n) => n.startsWith('lpa-static-')) && cacheNames.filter((n) => n.startsWith('lpa-site-')).length === 1, cacheNames.join(', '));
+  // both workers (the site's and the webview's) become the new ones; the webview's
+  // takes a moment (it updates when a webview opens), so give it time
+  const cacheDump = () => page.evaluate(async () => {
+    const out = {};
+    for (const name of await caches.keys()) out[name] = (await (await caches.open(name)).keys()).length;
+    return out;
+  }).catch(() => ({}));
+  const cleaned = await waitFor('old caches to be removed', async () => {
+    const names = Object.keys(await cacheDump());
+    return names.some((n) => n.startsWith('lpa-static-')) && names.filter((n) => n.startsWith('lpa-site-')).length === 1;
+  }, 30).then(() => true, () => false);
+  const dump = await cacheDump();
+  log('caches (name: entries):', JSON.stringify(dump));
+  check('old caches are removed, the (unchanged) VS Code files stay cached', cleaned, Object.keys(dump).join(', '));
 
   // ---- 5. offline ---------------------------------------------------------
   log('--- 5. server stopped');
@@ -272,8 +322,17 @@ try {
   check('and other pages work offline, too', true);
   await page.goto(PAGE);
   await page.waitForSelector('#exercise-1');
+  page.on('console', (m) => { if (m.type() === 'error') log('console error (offline):', m.text().slice(0, 160)); });
   await openExercise(page);
-  await waitFor('editor iframe', async () => editorFrame(page), 60);
+  await waitFor('editor iframe', async () => editorFrame(page), 20).catch(async (err) => {
+    const info = await page.evaluate(async () => {
+      const keys = [];
+      for (const name of await caches.keys()) for (const r of await (await caches.open(name)).keys()) if (/\/editor\/(\?|index|$)/.test(r.url)) keys.push(`${name}: ${r.url}`);
+      return { iframes: [...document.querySelectorAll('iframe')].map((f) => f.src), appClass: document.getElementById('app')?.className, keys };
+    }).catch((e) => ({ error: String(e) }));
+    log('no editor iframe offline:', JSON.stringify({ frames: page.frames().map((f) => f.url()), ...info }));
+    throw err;
+  });
   await waitFor('exercise file', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
   const offline = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('the editor works offline: Agda checks the exercise', /All Done/.test(offline), offline.slice(0, 80));

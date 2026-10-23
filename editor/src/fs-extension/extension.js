@@ -117,6 +117,10 @@ class WorkspaceFileSystem {
     /** @type {Map<string, Set<string>>} */
     this.children = new Map();
     this.saveTimers = new Map();
+    /** @type {Map<string, Array>} module name -> code blocks of its tutorial source */
+    this.sources = new Map();
+    /** @type {Map<string, Promise<void>>} exercise files being built, by path */
+    this.materializing = new Map();
     this.ready = this._load();
   }
 
@@ -169,7 +173,18 @@ class WorkspaceFileSystem {
   async _node(uri) {
     await this.ready;
     const path = normalize(uri.path);
-    const node = this.nodes.get(path);
+    let node = this.nodes.get(path);
+    if (!node) {
+      // An exercise file that does not exist yet: the path says which one it is.
+      // VS Code asks for such a file when it restores the tabs of a previous
+      // session (after the editor was restarted or the page reloaded), before the
+      // page has asked for the exercise.
+      const exercise = /^\/Exercise\/(.+)\/Ex(\d+)\.agda$/.exec(path);
+      if (exercise) {
+        await this.materializeExercise('Padova2025.' + exercise[1].replace(/\//g, '.'), Number(exercise[2])).catch(() => {});
+        node = this.nodes.get(path);
+      }
+    }
     if (!node) throw vscode.FileSystemError.FileNotFound(uri);
     return { path, node };
   }
@@ -182,6 +197,43 @@ class WorkspaceFileSystem {
     const existing = this.nodes.get(path);
     this._setNode(path, { type: FILE, size: data.byteLength, mtime: Date.now(), data, exercise: { key } });
     this._emitter.fire([{ type: existing ? vscode.FileChangeType.Changed : vscode.FileChangeType.Created, uri: vscode.Uri.from({ scheme: 'lpa', path }) }]);
+  }
+
+  /** The code blocks of a tutorial module's source. */
+  async blocksOf(moduleName) {
+    if (!this.sources.has(moduleName)) {
+      const relative = moduleName.replace(/\./g, '/') + '.lagda.md';
+      const response = await fetch(vscode.Uri.joinPath(this.filesBase, ...relative.split('/')).toString(true));
+      if (!response.ok) throw new Error(`No tutorial source for ${moduleName}`);
+      this.sources.set(moduleName, Exercises.splitModule(await response.text()).blocks);
+    }
+    return this.sources.get(moduleName);
+  }
+
+  /**
+   * Builds the file of an exercise from the tutorial source, puts the reader's
+   * earlier work (kept in IndexedDB) into it, and stores it. Does nothing, and
+   * keeps what the reader has typed, if the file exists already.
+   * @returns the path of the file
+   */
+  async materializeExercise(moduleName, ordinal) {
+    const path = Exercises.exercisePath(moduleName, ordinal);
+    await this.ready;
+    if (this.nodes.has(path)) return path;
+    if (!this.materializing.has(path)) {
+      const job = (async () => {
+        const blocks = await this.blocksOf(moduleName);
+        const exercise = Exercises.listExercises(blocks).find((e) => e.ordinal === ordinal);
+        if (!exercise) throw new Error(`${moduleName} has no exercise ${ordinal}`);
+        const built = Exercises.buildExerciseFile(blocks, exercise.block, moduleName, ordinal);
+        const key = `${moduleName}/${ordinal}`;
+        const saved = await dbGet(key);
+        await this.setExerciseFile(path, typeof saved === 'string' ? withRegion(built.text, saved) : built.text, key);
+      })().finally(() => this.materializing.delete(path));
+      this.materializing.set(path, job);
+    }
+    await this.materializing.get(path);
+    return path;
   }
 
   _persist(key, text) {
@@ -295,19 +347,8 @@ function activate(context) {
   const channel = new BroadcastChannel('lpa-editor');
   context.subscriptions.push({ dispose: () => channel.close() });
 
-  const sources = new Map(); // module name -> blocks of its tutorial source
   let current = null; // { key, module, ordinal, path } of the exercise being edited
   let opening = null; // key of the exercise being opened right now
-
-  async function sourceOf(moduleName) {
-    if (!sources.has(moduleName)) {
-      const relative = moduleName.replace(/\./g, '/') + '.lagda.md';
-      const response = await fetch(vscode.Uri.joinPath(filesBase, ...relative.split('/')).toString(true));
-      if (!response.ok) throw new Error(`No tutorial source for ${moduleName}`);
-      sources.set(moduleName, Exercises.splitModule(await response.text()).blocks);
-    }
-    return sources.get(moduleName);
-  }
 
   async function loadWithAgda() {
     // agda-mode activates when the first Agda file is opened; its commands appear a moment later
@@ -329,23 +370,24 @@ function activate(context) {
     }
     opening = key;
     try {
-      const blocks = await sourceOf(moduleName);
-      const exercise = Exercises.listExercises(blocks).find((e) => e.ordinal === ordinal);
-      if (!exercise) throw new Error(`${moduleName} has no exercise ${ordinal}`);
-      const built = Exercises.buildExerciseFile(blocks, exercise.block, moduleName, ordinal);
-      const saved = await dbGet(key);
-      const text = typeof saved === 'string' ? withRegion(built.text, saved) : built.text;
-      await fileSystem.setExerciseFile(built.path, text, key);
+      // The file may exist already: VS Code restores the tabs of the previous session.
+      const path = await fileSystem.materializeExercise(moduleName, ordinal);
 
-      const uri = vscode.Uri.from({ scheme: 'lpa', path: built.path });
+      const uri = vscode.Uri.from({ scheme: 'lpa', path });
       const editor = await vscode.window.showTextDocument(uri, { preview: false });
-      const start = Math.max(0, built.startLine);
-      editor.selection = new vscode.Selection(start, 0, start, 0);
-      editor.revealRange(new vscode.Range(start, 0, Math.max(start, built.endLine - 1), 0), vscode.TextEditorRevealType.AtTop);
+      // show the exercise (between the markers), wherever the reader has scrolled to
+      const text = editor.document.getText();
+      const startMark = text.indexOf(START);
+      if (startMark >= 0) {
+        const start = text.slice(0, startMark).split('\n').length; // the line after the marker
+        const end = text.slice(0, Math.max(startMark, text.indexOf(END))).split('\n').length;
+        editor.selection = new vscode.Selection(start, 0, start, 0);
+        editor.revealRange(new vscode.Range(start, 0, Math.max(start, end - 1), 0), vscode.TextEditorRevealType.AtTop);
+      }
       vscode.commands.executeCommand('workbench.action.closeSidebar').then(undefined, () => {});
 
-      current = { key, module: moduleName, ordinal, path: built.path };
-      channel.postMessage({ t: 'opened', module: moduleName, ordinal, path: built.path });
+      current = { key, module: moduleName, ordinal, path };
+      channel.postMessage({ t: 'opened', module: moduleName, ordinal, path });
       loadWithAgda();
     } finally {
       opening = null;

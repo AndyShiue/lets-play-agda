@@ -182,10 +182,19 @@
     for (const section of $$('.exercise', content)) {
       renderExercise(section);
       const details = $('details.solution', section);
+      const agreed = () => section.classList.contains('solved') || details.dataset.confirmed;
+      const ask = () => confirm('Do you want to peek at the reference solution?');
+      // Ask BEFORE the answer is shown: stop the summary from opening the box by itself
+      // and open it by hand once the reader has agreed.
+      $('summary', details).addEventListener('click', (event) => {
+        if (details.open || agreed()) return;
+        event.preventDefault();
+        if (ask()) { details.dataset.confirmed = '1'; details.open = true; }
+      });
+      // anything else that opens the box (find in page, a link into it) is asked, too
       details.addEventListener('toggle', () => {
-        if (details.open && !section.classList.contains('solved') && !details.dataset.confirmed) {
-          if (confirm('Do you want to peek at the reference solution?')) details.dataset.confirmed = '1';
-          else details.open = false;
+        if (details.open && !agreed()) {
+          if (ask()) details.dataset.confirmed = '1'; else details.open = false;
         }
       });
     }
@@ -358,10 +367,24 @@
     return `editor/?embedded=1&theme=${effectiveTheme()}`;
   }
 
-  function showEditor() {
+  // What survives reloading the page: whether the editor was open, and with which exercise.
+  const EDITOR_STATE = 'lpa:editor';
+  const readEditorState = () => { try { return JSON.parse(store.get(EDITOR_STATE) || '{}'); } catch { return {}; } };
+  const saveEditorState = (patch) => store.set(EDITOR_STATE, JSON.stringify({ ...readEditorState(), ...patch }));
+
+  // The panel without the editor in it: shown while the page prepares itself for the
+  // editor, or to say why it cannot run.
+  function showPanel() {
     app.classList.add('editor-open');
     panel.hidden = false;
     toggle.setAttribute('aria-pressed', 'true');
+  }
+
+  // Only for an isolated page: the editor inside the frame can only be isolated if the
+  // page around it is (see ensureIsolated).
+  function showEditor() {
+    showPanel();
+    saveEditorState({ open: true });
     if (!frame) {
       frame = Object.assign(document.createElement('iframe'), { title: 'Agda editor', src: editorUrl() });
       frame.allow = 'cross-origin-isolated; clipboard-read; clipboard-write';
@@ -373,18 +396,36 @@
     app.classList.remove('editor-open');
     panel.hidden = true;
     toggle.setAttribute('aria-pressed', 'false');
+    saveEditorState({ open: false });
+  }
+
+  // Opens the editor, with the exercise it had last if there was one.
+  function openEditorAgain() {
+    showEditor();
+    const { module, ordinal, title } = readEditorState();
+    if (!module || !channel) return;
+    pending = { module, ordinal };
+    $('#editor-title').textContent = title || 'Editor';
+    setStatus(editorReady ? 'Opening the exercise…' : 'Starting the editor. The first start downloads about 30 MB; later starts use the cache.');
+    startRetry();
   }
 
   function restartEditor() {
+    // the new editor has forgotten which exercise it was showing: say it again
+    const again = pending ?? (active ? { module: active.module, ordinal: active.ordinal } : null);
     if (frame) { frame.remove(); frame = null; }
     editorReady = false;
     active = null;
+    pending = again;
     clearInterval(watchTimer);
     showEditor();
     if (pending) { setStatus('Restarting the editor…'); startRetry(); }
   }
 
-  toggle.addEventListener('click', () => (panel.hidden ? showEditor() : closeEditor()));
+  toggle.addEventListener('click', async () => {
+    if (!panel.hidden) { closeEditor(); return; }
+    if (await ensureIsolated({ open: true })) openEditorAgain();
+  });
 
   function startRetry() {
     clearInterval(retryTimer);
@@ -403,11 +444,11 @@
   async function ensureIsolated(intent) {
     if (self.crossOriginIsolated) return true;
     if (!('serviceWorker' in navigator) || !isSecureContext) {
-      showEditor();
+      showPanel();
       setStatus('This browser cannot run the editor here: it needs service workers (HTTPS or localhost).');
       return false;
     }
-    showEditor();
+    showPanel(); // not the editor itself: a frame in a page that is not isolated yet could not be isolated either
     setStatus('Preparing the editor for its first start…');
     await registerWorker();
     await navigator.serviceWorker.ready;
@@ -427,7 +468,9 @@
     pending = { ...intent };
     recordActivity();
     showEditor();
-    $('#editor-title').textContent = `${section.dataset.id || 'Exercise'} — ${section.closest('#content').dataset.title}`;
+    const title = `${section.dataset.id || 'Exercise'} — ${section.closest('#content').dataset.title}`;
+    $('#editor-title').textContent = title;
+    saveEditorState({ module: intent.module, ordinal: intent.ordinal, title });
     setStatus(editorReady ? 'Opening the exercise…' : 'Starting the editor. The first start downloads about 30 MB; later starts use the cache.');
     startRetry();
     channel.postMessage({ t: 'open', module: intent.module, ordinal: Number(intent.ordinal) });
@@ -687,8 +730,15 @@
     sessionStorage.removeItem('lpa:resume');
     try {
       const intent = JSON.parse(resume);
-      const section = $$('.exercise').find((s) => s.dataset.module === intent.module && s.dataset.ordinal === String(intent.ordinal));
-      if (section) { section.scrollIntoView({ block: 'center' }); editExercise(section); }
+      if (intent.module) {
+        const section = $$('.exercise').find((s) => s.dataset.module === intent.module && s.dataset.ordinal === String(intent.ordinal));
+        if (section) { section.scrollIntoView({ block: 'center' }); editExercise(section); }
+      } else if (intent.open) {
+        openEditorAgain();
+      }
     } catch { /* ignore */ }
+  } else if (self.crossOriginIsolated && readEditorState().open && matchMedia('(min-width: 901px)').matches) {
+    // the page was reloaded with the editor open: bring it back (not on a phone, where it would cover the page)
+    openEditorAgain();
   }
 })();

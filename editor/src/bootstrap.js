@@ -36,6 +36,15 @@ async function ensureIsolation() {
     return true;
   }
 
+  if (params.has('embedded')) {
+    // In a page of the site, only that page can make this frame isolated, and it does
+    // so before it shows the editor. Registering a worker here would not help.
+    say(
+      'The editor needs the page around it to be cross-origin isolated.\n' +
+      'Reload the page. If this stays, open the site in a normal (not private) window.', true);
+    return false;
+  }
+
   if (!('serviceWorker' in navigator) || !globalThis.isSecureContext) {
     say('This editor needs service workers (HTTPS or localhost, and not a private window in some browsers).', true);
     return false;
