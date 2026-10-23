@@ -254,6 +254,7 @@
     if (button.dataset.action === 'edit') editExercise(button.closest('.exercise'));
     if (button.dataset.action === 'editor-close') closeEditor();
     if (button.dataset.action === 'editor-reload') restartEditor();
+    if (button.dataset.action === 'symbols') toggleSymbolBar();
   });
   window.addEventListener('popstate', () => navigate(location.href, false));
 
@@ -476,11 +477,71 @@
     channel.postMessage({ t: 'open', module: intent.module, ordinal: Number(intent.ordinal) });
   }
 
+  // ---------------------------------------------------------------------------
+  // the symbol bar: candidates for what has been typed after a backslash (`\to` → →, …).
+  // The editor's extension works them out from the text before the cursor and puts the
+  // tapped symbol in; this is the bar. agda-mode's own input method needs key presses and
+  // does not survive a phone, so where the screen is touched the bar is the way in.
+  // ---------------------------------------------------------------------------
+  const symbolBar = $('#symbol-bar');
+  const symbolToggle = $('[data-action="symbols"]');
+  const SYMBOL_BAR = 'lpa:symbol-bar';
+  const barWanted = () => {
+    const saved = store.get(SYMBOL_BAR);
+    return saved === null ? matchMedia('(pointer: coarse)').matches : saved === '1';
+  };
+
+  function symbolButtonFor(text, label, message) {
+    const button = Object.assign(document.createElement('button'), { type: 'button', title: label ? `${text}  (${label})` : text });
+    button.dataset.text = text;
+    button.dataset.message = message;
+    button.append(
+      Object.assign(document.createElement('span'), { className: 'sym-c', textContent: text }),
+      Object.assign(document.createElement('span'), { className: 'sym-s', textContent: label }),
+    );
+    return button;
+  }
+
+  // typed: null (no backslash before the cursor), or what follows the backslash there
+  function renderSymbolBar({ typed, items }) {
+    const buttons = typed === null ? [symbolButtonFor('\\', 'start', 'im-insert')] : []; // a backslash is hidden away on a phone's keyboard
+    for (const [symbol, sequence] of items) buttons.push(symbolButtonFor(symbol, sequence, typed === null ? 'im-insert' : 'im-pick'));
+    symbolBar.replaceChildren(...buttons);
+    symbolBar.scrollLeft = 0;
+  }
+  renderSymbolBar({ typed: null, items: [] });
+
+  function applySymbolBar() {
+    const on = barWanted();
+    symbolBar.hidden = !on;
+    symbolToggle.setAttribute('aria-pressed', String(on));
+    channel?.postMessage({ t: 'im-mode', bar: on });
+    if (on) channel?.postMessage({ t: 'im-sync' });
+  }
+
+  function toggleSymbolBar() {
+    store.set(SYMBOL_BAR, barWanted() ? '0' : '1');
+    applySymbolBar();
+  }
+
+  // tapping a button must not take the focus from the editor (a phone would put its keyboard away)
+  symbolBar.addEventListener('mousedown', (event) => event.preventDefault());
+  symbolBar.addEventListener('pointerdown', (event) => event.preventDefault());
+  symbolBar.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-text]');
+    if (button) channel?.postMessage({ t: button.dataset.message, text: button.dataset.text });
+  });
+  applySymbolBar();
+
   channel?.addEventListener('message', ({ data }) => {
     switch (data?.t) {
       case 'ready':
         editorReady = true;
+        applySymbolBar(); // a new editor: tell it which input method to use, and ask for the bar
         if (pending) channel.postMessage({ t: 'open', module: pending.module, ordinal: Number(pending.ordinal) });
+        break;
+      case 'im':
+        renderSymbolBar(data);
         break;
       case 'opened':
         if (pending && data.module === pending.module && Number(data.ordinal) === Number(pending.ordinal)) {

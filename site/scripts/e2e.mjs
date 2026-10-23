@@ -272,6 +272,45 @@ try {
   check('Agda loads the exercise and shows 1 goal', /All Goals/.test(goals) && /\?0 : Bool/.test(goals), goals.slice(0, 100));
   await page.screenshot({ path: path.join(OUT, '2-editor.png') });
 
+  // ---- 2b. the symbol bar ------------------------------------------------
+  // Candidates for what is typed after a backslash, tapped into the text: for a phone,
+  // where agda-mode's input method does not work. Switched on here by its button.
+  log('--- 2b. the symbol bar');
+  const BS = String.fromCharCode(92); // a backslash
+  const bar = page.locator('#symbol-bar');
+  const hasSymbol = (symbol) => bar.locator('button').evaluateAll((buttons, s) => buttons.some((b) => b.dataset.text === s), symbol);
+  const holeText = async () => (await editorText(page)).split('\n').find((l) => l.includes('idBool x'));
+  await page.click('[data-action="symbols"]');
+  await waitFor('the idle bar: a backslash button and the common symbols', async () => (await bar.isVisible()) && (await hasSymbol(BS)) && (await hasSymbol('→')), 30);
+  check('the button shows the symbol bar: a backslash button, then the symbols the tutorial uses most', true);
+
+  const holeLineOfEditor = editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool x' }).first();
+  await holeLineOfEditor.click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); // idBool x = {!|!}
+  await page.keyboard.type(BS + 'to', { delay: 60 });
+  await waitFor('the candidates for the sequence', async () => (await bar.locator('button[data-message="im-pick"]').count()) > 0, 30);
+  const first = await bar.locator('button[data-message="im-pick"]').first().evaluate((b) => b.dataset.text);
+  check('typing a backslash and `to` in the hole lists candidates, the exact match first', first === '→', `first candidate: ${first}`);
+  check('the typed text is left alone (the bar replaces it, agda-mode\'s input method is off)', (await holeText()).includes('{!' + BS + 'to!}'), await holeText());
+  await bar.locator('button[data-text="→"]').first().click();
+  await waitFor('the arrow in the hole', async () => (await holeText()).includes('{!→!}'), 15);
+  check('tapping the candidate replaces the typed sequence, inside the hole', (await holeText()).includes('{!→!}'), await holeText());
+
+  await bar.locator('button').filter({ has: page.locator('.sym-c', { hasText: BS }) }).first().click();
+  await waitFor('the backslash', async () => (await holeText()).includes('{!→' + BS + '!}'), 15);
+  await page.keyboard.type('bN', { delay: 60 });
+  await waitFor('the candidate for bN', async () => (await bar.locator('button[data-message="im-pick"]').first().evaluate((b) => b.dataset.text).catch(() => null)) === 'ℕ', 30);
+  await bar.locator('button[data-text="ℕ"]').first().click();
+  await waitFor('ℕ in the hole', async () => (await holeText()).includes('{!→ℕ!}'), 15);
+  check('the backslash button starts a sequence; `bN` offers ℕ', (await holeText()).includes('{!→ℕ!}'), await holeText());
+
+  await waitFor('the idle bar again', async () => (await bar.locator('button[data-message="im-insert"]').count()) > 1, 15);
+  await bar.locator('button[data-text="≡"]').first().click();
+  await waitFor('≡ in the hole', async () => (await holeText()).includes('{!→ℕ≡!}'), 15);
+  check('without a backslash before the cursor a symbol of the bar is put in at the cursor', (await holeText()).includes('{!→ℕ≡!}'), await holeText());
+  await page.screenshot({ path: path.join(OUT, '2b-symbol-bar.png') });
+
   // ---- 3. solve -----------------------------------------------------------
   log('--- 3. solve it');
   await fillHole(page);

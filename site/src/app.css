@@ -194,7 +194,15 @@ details.solution > summary { cursor: pointer; padding: .2rem 0; }
 /* ---- editor panel ---------------------------------------------------- */
 .editor-bar { display: flex; align-items: center; gap: .25rem; padding: .25rem .5rem; border-bottom: 1px solid var(--line); background: var(--bg-soft); }
 .editor-title { margin-right: auto; font-size: .85rem; font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.editor-panel iframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
+.editor-panel iframe { flex: 1; width: 100%; border: 0; background: var(--bg); order: 1; }
+/* candidates for what was typed after a backslash; under the editor, above a phone's keyboard */
+.symbol-bar { order: 2; display: flex; gap: .35rem; overflow-x: auto; padding: .35rem .5rem; border-top: 1px solid var(--line); background: var(--bg-soft); scrollbar-width: none; overscroll-behavior-x: contain; }
+.symbol-bar[hidden] { display: none; }
+.symbol-bar::-webkit-scrollbar { display: none; }
+.symbol-bar button { flex: none; min-width: 2.8rem; height: 2.9rem; padding: .1rem .55rem; display: grid; place-items: center; align-content: center; gap: .05rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--bg); color: var(--fg); cursor: pointer; touch-action: manipulation; }
+.symbol-bar button:hover { border-color: var(--accent); }
+.symbol-bar .sym-c { font: 1.3rem/1.1 var(--mono); }
+.symbol-bar .sym-s { font: .62rem/1 var(--font); color: var(--muted); max-width: 5.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-status { position: absolute; inset: 2.6rem 0 0 0; display: grid; place-items: center; text-align: center; padding: 2rem; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--muted); font-size: .95rem; z-index: 2; pointer-events: none; }
 .editor-status:empty { display: none; }
 .editor-resizer { position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 5; }

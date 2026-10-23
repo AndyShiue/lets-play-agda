@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -139,6 +140,15 @@ const exerciseLib = fs.readFileSync(path.join(repoRoot, 'site', 'scripts', 'lib'
   const code = fs.readFileSync(file, 'utf8');
   if (!code.includes('/*__EXERCISE_LIB__*/')) { console.error('extension.js has no exercise library placeholder'); process.exit(1); }
   fs.writeFileSync(file, code.replace('/*__EXERCISE_LIB__*/', () => exerciseLib));
+}
+// The key sequences of agda-mode's input method (\to, \bN, …) for the symbol bar:
+// [[symbol, [sequence, …]], …]
+{
+  const query = createRequire(import.meta.url)(path.join(inputs.agdaMode, 'asset', 'query.js')).default;
+  const table = Object.entries(query)
+    .map(([code, sequences]) => [String.fromCodePoint(Number(code)), sequences])
+    .filter(([symbol]) => !/[\s\u0000-\u001f]/.test(symbol));
+  fs.writeFileSync(path.join(ext, 'lets-play-agda-fs', 'symbols.json'), JSON.stringify(table));
 }
 // VS Code asks for package.nls.json of every extension; an empty one avoids a 404 per start.
 for (const name of fs.readdirSync(ext)) {

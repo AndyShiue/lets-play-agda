@@ -63,6 +63,10 @@ The page and the editor talk over a `BroadcastChannel` named `lpa-editor`
 | `{t:'open', module, ordinal}` | open exercise `ordinal` (1-based) of `module` (`Padova2025.…`) |
 | `{t:'get-code', module, ordinal}` | send the reader's solution (the part between the markers) |
 | `{t:'ping'}` | are you there? |
+| `{t:'im-sync'}` | (symbol bar) send the bar's current state |
+| `{t:'im-mode', bar}` | (symbol bar) `bar: true` switches agda-mode's input method off, `false` on again |
+| `{t:'im-pick', text}` | (symbol bar) put `text` in place of the backslash sequence before the cursor |
+| `{t:'im-insert', text}` | (symbol bar) put `text` at the cursor |
 
 | editor → page | meaning |
 |---|---|
@@ -70,6 +74,11 @@ The page and the editor talk over a `BroadcastChannel` named `lpa-editor`
 | `{t:'opened', module, ordinal, path}` | the exercise file `lpa:<path>` is open |
 | `{t:'code', module, ordinal, text}` | the solution |
 | `{t:'error', message}` | something went wrong |
+| `{t:'im', typed, items}` | (symbol bar) `typed`: what follows a backslash before the cursor (`null`: no backslash); `items`: `[[symbol, sequence], …]`, the candidates, best first |
+
+The symbol bar's candidates come from `extensions/lets-play-agda-fs/symbols.json`, which the
+build makes from agda-mode's own table (`asset/query.js`). The extension has no state of
+its own for it: every message is worked out from the text before the cursor.
 
 An exercise's file is generated from the tutorial source by the conventions in
 `../site/scripts/lib/exercises.cjs` (all earlier code blocks, then the exercise

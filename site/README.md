@@ -64,6 +64,17 @@ run yet.
   above the exercise to fold into, and the tests fold into `-- EXERCISE ENDS`), so that
   what is visible is the exercise exactly as the page shows it. A click on a fold shows
   the rest.
+* **The symbol bar** (the `∀` button above the editor; on by default where the screen
+  is touched). agda-mode's input method (`\to` → `→`) starts from a key press of the
+  backslash and keeps its state from key to key; with a phone's keyboard it does not
+  work, or only in bits. The bar has no state: the editor's extension looks at the text
+  before the cursor, and when a backslash and a few characters are there (in a hole, too)
+  the bar lists the candidates of agda-mode's table (`extensions/lets-play-agda-fs/symbols.json`,
+  made from agda-mode's own), exact match first and the symbols the tutorial uses most
+  next; a tap puts the symbol in place of what was typed. Without a backslash the bar
+  shows a backslash button (which a phone's keyboard hides away) and those common symbols,
+  which a tap puts in at the cursor. While the bar is on, agda-mode's input method is
+  switched off (the page tells the extension), so that the two do not work on the same text.
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a
@@ -102,7 +113,14 @@ run yet.
   the editor downloads ~30 MB (cached afterwards), and the first load of an
   exercise type-checks the modules it imports (seconds to ~20 s for the cubical
   library). Precompiled `.agdai` files might help; untested.
-* Tested in Edge (Chromium) only; not in Safari, Firefox or on phones.
+* Tested in Edge (Chromium) only; not in Safari, Firefox or on phones. The symbol bar is
+  tested on a desktop and with a phone-sized touch emulation, not with a phone's keyboard:
+  whether the bar stays above an on-screen keyboard (the page asks for
+  `interactive-widget=resizes-content`, which Safari does not support) and what the
+  keyboards of real phones do is unknown. The symbol bar inserts into the editor only, not
+  into the prompt of the Agda panel (`C-c C-v`).
+* Agda's commands (load, case split, refine, …) are key chords (`C-c C-l`, …) that a phone
+  cannot press; there is no touch version of them yet.
 * The tutorial's text still mentions Emacs key bindings in places. `C-c C-v` (evaluate
   an expression) works, as the tutorial says: the editor's extension binds it to
   agda-mode's "compute normal form", which is `C-c C-n` there, a key a browser keeps for

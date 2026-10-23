@@ -450,6 +450,83 @@ function activate(context) {
     return region ? region.text : null;
   }
 
+  // ---------------------------------------------------------------------------
+  // the symbol bar
+  //
+  // The page shows a bar with candidates for what has been typed after a backslash
+  // (`\to` → → …), and the symbol that is tapped replaces it. agda-mode's own input method
+  // starts from a key press and keeps its state from one key to the next, which does not
+  // survive a phone (no key presses, input in bursts). This one has no state: it only looks
+  // at the text before the cursor, wherever that is, in a hole too.
+  // ---------------------------------------------------------------------------
+  const COMMON = [...'→←ℕ≡≢∷≤≥λ¬∀∃Σ×⊎⊥⊤∈⇒₀₁₂⟨⟩∘']; // what the tutorial uses most, in this order
+  const SEQUENCE = /\\([^\s\\]*)$/; // a backslash and what follows it, up to the cursor
+  const MOST = 40; // candidates shown
+  let symbolTable = null; // [[symbol, [sequence, …]], …] of agda-mode's input method
+
+  function loadSymbols() {
+    symbolTable ??= vscode.workspace.fs.readFile(vscode.Uri.joinPath(context.extensionUri, 'symbols.json'))
+      .then((bytes) => JSON.parse(new TextDecoder().decode(bytes)), () => []);
+    return symbolTable;
+  }
+
+  /** [[symbol, shortest sequence that goes with what was typed], …], the best first. */
+  function candidatesFor(table, typed) {
+    const found = [];
+    for (const [symbol, sequences] of table) {
+      const exact = sequences.includes(typed);
+      let shortest = null;
+      for (const s of sequences) if (s.startsWith(typed) && (shortest === null || s.length < shortest.length)) shortest = s;
+      if (shortest === null) continue;
+      const rank = COMMON.indexOf(symbol);
+      found.push({ symbol, sequence: exact ? typed : shortest, exact, rank: rank < 0 ? COMMON.length : rank });
+    }
+    found.sort((a, b) => (b.exact - a.exact) || (a.rank - b.rank) || (a.sequence.length - b.sequence.length) || (a.sequence < b.sequence ? -1 : 1));
+    return found.slice(0, MOST).map((c) => [c.symbol, c.sequence]);
+  }
+
+  let lastBar = '';
+  async function sendBar() {
+    const table = await loadSymbols();
+    const editor = vscode.window.activeTextEditor;
+    let typed = null; // null: no backslash before the cursor
+    if (editor && editor.document.uri.scheme === 'lpa' && editor.selection.isEmpty) {
+      const { line, character } = editor.selection.active;
+      typed = SEQUENCE.exec(editor.document.lineAt(line).text.slice(0, character))?.[1] ?? null;
+    }
+    // without anything typed yet: the symbols the tutorial uses most
+    const items = typed ? candidatesFor(table, typed) : COMMON.map((symbol) => [symbol, table.find(([s]) => s === symbol)?.[1].reduce((a, b) => (b.length < a.length ? b : a)) ?? '']);
+    const message = { t: 'im', typed, items };
+    const json = JSON.stringify(message);
+    if (json !== lastBar) { lastBar = json; channel.postMessage(message); }
+  }
+  context.subscriptions.push(
+    vscode.window.onDidChangeTextEditorSelection(() => { sendBar().catch(() => {}); }),
+    vscode.window.onDidChangeActiveTextEditor(() => { sendBar().catch(() => {}); }),
+  );
+
+  /** Puts `text` at the cursor; with `replace`, in place of the backslash sequence before it. */
+  async function placeText(text, replace) {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== 'lpa') return;
+    let range = editor.selection;
+    if (replace && range.isEmpty) {
+      const { line, character } = range.active;
+      const m = SEQUENCE.exec(editor.document.lineAt(line).text.slice(0, character));
+      if (m) range = new vscode.Range(line, character - m[0].length, line, character);
+    }
+    if (!(await editor.edit((builder) => builder.replace(range, text)))) return;
+    const after = range.start.translate(0, text.length);
+    editor.selection = new vscode.Selection(after, after);
+    await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup');
+  }
+
+  // With the bar, agda-mode's input method would work on the same text: only one of them.
+  async function useBarInsteadOfInputMethod(bar) {
+    const configuration = vscode.workspace.getConfiguration('agdaMode');
+    if (configuration.get('inputMethod.enabled') !== !bar) await configuration.update('inputMethod.enabled', !bar, vscode.ConfigurationTarget.Global);
+  }
+
   channel.onmessage = async ({ data }) => {
     try {
       if (data?.t === 'ping') channel.postMessage({ t: 'ready' });
@@ -458,6 +535,10 @@ function activate(context) {
         const text = solutionOf(data.module, Number(data.ordinal));
         if (text !== null) channel.postMessage({ t: 'code', module: data.module, ordinal: Number(data.ordinal), text });
       }
+      else if (data?.t === 'im-sync') { lastBar = ''; await sendBar(); }
+      else if (data?.t === 'im-mode') await useBarInsteadOfInputMethod(!!data.bar);
+      else if (data?.t === 'im-pick') await placeText(String(data.text), true);
+      else if (data?.t === 'im-insert') await placeText(String(data.text), false);
     } catch (err) {
       channel.postMessage({ t: 'error', message: String(err && err.message || err) });
     }
