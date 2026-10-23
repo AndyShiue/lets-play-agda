@@ -77,6 +77,9 @@ run yet.
   worker would store the previous deployment's files; and there are two caches: the
   site's own files per build, and the VS Code files (about 60 MB) per VS Code identity,
   so a deployment that leaves VS Code alone does not make readers download it again.
+  The editor's own files are cached when first used, so after an update they are fetched
+  again the next time the page loads (the reload the notice asks for): offline use of
+  the editor needs one online visit with the new version.
   The end-to-end test simulates a deployment and checks all of this.
 * **If the service worker ever misbehaves:** open any page with `?nosw` to remove
   it and its caches.

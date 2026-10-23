@@ -119,6 +119,20 @@ async function openExercise(page) {
   await page.click('#exercise-1 [data-action="edit"]');
 }
 
+const editorGroups = (page) => editorFrame(page).locator('.editor-group-container').count();
+
+// the colour of a point of an element, at fractions of its width and height (the screenshot is decoded in the page)
+async function pixelOf(page, locator, fx, fy) {
+  const png = (await locator.screenshot()).toString('base64');
+  return page.evaluate(async ([b64, x, y]) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+    const ctx = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d');
+    ctx.drawImage(bitmap, 0, 0);
+    return [...ctx.getImageData(Math.min(bitmap.width - 1, Math.floor(bitmap.width * x)), Math.min(bitmap.height - 1, Math.floor(bitmap.height * y)), 1, 1).data].slice(0, 3);
+  }, [png, fx, fy]);
+}
+
 async function editorText(page) {
   const frame = editorFrame(page);
   return (await frame.locator('.monaco-editor[data-uri*="Ex1.agda"] .view-lines').first().innerText()).replace(/ /g, ' ');
@@ -189,6 +203,23 @@ try {
   check('agreeing opens it, and the question came while it was still closed',
     (await page.$eval('#exercise-2 details.solution', (d) => d.open)) && (await page.evaluate(() => window.__asked)).every((open) => open === false));
 
+  // the notices that float above the page follow the theme: dark in dark mode, light in light mode
+  const noticeBackgrounds = () => page.evaluate(() => ['update-bar', 'toast show'].map((className) => {
+    const el = Object.assign(document.createElement('div'), { className });
+    document.body.append(el);
+    const rgb = getComputedStyle(el).backgroundColor.match(/\d+/g).slice(0, 3).map(Number);
+    el.remove();
+    return rgb;
+  }));
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const darkNotices = await noticeBackgrounds();
+  await page.emulateMedia({ colorScheme: 'light' });
+  const lightNotices = await noticeBackgrounds();
+  await page.emulateMedia({ colorScheme: null });
+  check('in dark mode the reload notice and the toast are dark, in light mode light',
+    darkNotices.every((rgb) => Math.max(...rgb) < 80) && lightNotices.every((rgb) => Math.min(...rgb) > 200),
+    `dark ${JSON.stringify(darkNotices)}, light ${JSON.stringify(lightNotices)}`);
+
   await page.click('a[data-module="Padova2025.Welcome.About"]');
   await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.Welcome.About');
   await page.waitForFunction(() => document.querySelectorAll('#char-table tr').length > 20, null, { timeout: 10000 });
@@ -253,6 +284,9 @@ try {
   check('reopening the exercise restores the reader\'s code', /idBool x = x/.test(await editorText(page)));
   const again = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('Agda checks the restored file: All Done', /All Done/.test(again), again.slice(0, 80));
+  // agda-mode opens a group for its panel on every start; the one of the last visit must not stay behind
+  await sleep(1500);
+  check('a new visit shows the file and the Agda panel, and no leftover empty group', (await editorGroups(page)) === 2, `${await editorGroups(page)} groups`);
 
   // restarting the editor (the button in its bar): the exercise must come back
   await page.click('[data-action="editor-reload"]');
@@ -261,6 +295,8 @@ try {
   check('restarting the editor brings the exercise back, with the reader\'s code', /idBool x = x/.test(await editorText(page)));
   const restarted = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('and Agda checks it again', /All Done/.test(restarted), restarted.slice(0, 80));
+  await sleep(1500);
+  check('restarting the editor leaves no extra group behind', (await editorGroups(page)) === 2, `${await editorGroups(page)} groups`);
 
   // reloading the whole page with the editor open
   await page.reload();
@@ -269,6 +305,22 @@ try {
   await waitFor('the exercise file after reloading the page', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
   await sleep(1500);
   check('reloading the page brings the editor back with the exercise', /idBool x = x/.test(await editorText(page)));
+  await waitAgda(page, /All Done|All Goals|Error/, 240);
+  await sleep(1500);
+  check('and still no extra group', (await editorGroups(page)) === 2, `${await editorGroups(page)} groups`);
+
+  // dark mode: the Agda panel must not sit on a white backdrop
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.reload();
+  await page.waitForSelector('#exercise-1');
+  await waitFor('the editor to come back', async () => (await page.locator('#app.editor-open').count()) === 1 && editorFrame(page), 30);
+  await waitAgda(page, /All Done|All Goals|Error/, 240);
+  await sleep(1500);
+  const webview = editorFrame(page).locator('iframe.webview:visible').first();
+  const edges = [await pixelOf(page, webview, 0.003, 0.5), await pixelOf(page, webview, 0.5, 0.97)];
+  check('in dark mode the Agda panel has a dark background, not white', edges.every((rgb) => Math.max(...rgb) < 100), JSON.stringify(edges));
+  await page.screenshot({ path: path.join(OUT, '4-dark.png') });
+  await page.emulateMedia({ colorScheme: null });
   await page.close();
 
   // ---- 4b. a new deployment reaches a returning visitor --------------------
@@ -285,14 +337,32 @@ try {
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
   await page.goto(PAGE);
   await page.waitForSelector('#exercise-1', { timeout: 30000 });
+  // the new worker takes over while the page is open: the page offers a reload
+  const offered = await page.waitForSelector('.update-bar', { timeout: 60000 }).then(() => true, () => false);
+  check('the page offers a reload once the new version has taken over', offered);
+  if (offered) {
+    // the notice is in the colours of the theme (looked at by eye: .cache/e2e/update-notice-dark.png)
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.locator('.update-bar').screenshot({ path: path.join(OUT, 'update-notice-dark.png') });
+    await page.emulateMedia({ colorScheme: null });
+  }
   const gotNew = await waitFor('the new version',
     () => page.evaluate(async (m) => (await (await fetch('editor/extensions/lets-play-agda-fs/extension.js')).text()).includes(m), MARKER), 60).then(() => true, () => false);
   check('a returning visitor gets the new version without closing every tab', gotNew);
-  // the site's own files are cached per build, so the editor refills that cache once, online
-  await openExercise(page);
+  // The site's own files are cached per build, and the editor's when first used: the reload
+  // that the notice asks for brings the editor up through the new worker, online.
+  await Promise.all([page.waitForEvent('load', { timeout: 30000 }), page.click('.update-bar .btn')]);
+  await page.waitForSelector('#exercise-1');
+  await waitFor('the editor to come back', async () => (await page.locator('#app.editor-open').count()) === 1 && editorFrame(page), 30);
   await waitFor('exercise file', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"]').count()) > 0, 120);
   const afterUpdate = await waitAgda(page, /All Done|All Goals|Error/, 240);
   check('the editor works after the update', /All Done/.test(afterUpdate), afterUpdate.slice(0, 80));
+  const editorPageCachedIn = await page.evaluate(async () => {
+    const found = [];
+    for (const name of await caches.keys()) for (const r of await (await caches.open(name)).keys()) if (/\/editor\/(\?|index|$)/.test(r.url)) found.push(name);
+    return found;
+  });
+  check('the new version has the editor page cached', editorPageCachedIn.length === 1 && editorPageCachedIn[0].startsWith('lpa-site-e2e0update00'), editorPageCachedIn.join(', ') || 'not cached');
   // both workers (the site's and the webview's) become the new ones; the webview's
   // takes a moment (it updates when a webview opens), so give it time
   const cacheDump = () => page.evaluate(async () => {
@@ -303,7 +373,7 @@ try {
   const cleaned = await waitFor('old caches to be removed', async () => {
     const names = Object.keys(await cacheDump());
     return names.some((n) => n.startsWith('lpa-static-')) && names.filter((n) => n.startsWith('lpa-site-')).length === 1;
-  }, 30).then(() => true, () => false);
+  }, 60).then(() => true, () => false);
   const dump = await cacheDump();
   log('caches (name: entries):', JSON.stringify(dump));
   check('old caches are removed, the (unchanged) VS Code files stay cached', cleaned, Object.keys(dump).join(', '));
@@ -322,7 +392,6 @@ try {
   check('and other pages work offline, too', true);
   await page.goto(PAGE);
   await page.waitForSelector('#exercise-1');
-  page.on('console', (m) => { if (m.type() === 'error') log('console error (offline):', m.text().slice(0, 160)); });
   await openExercise(page);
   await waitFor('editor iframe', async () => editorFrame(page), 20).catch(async (err) => {
     const info = await page.evaluate(async () => {

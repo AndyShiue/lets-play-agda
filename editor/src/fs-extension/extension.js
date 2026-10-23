@@ -350,7 +350,23 @@ function activate(context) {
   let current = null; // { key, module, ordinal, path } of the exercise being edited
   let opening = null; // key of the exercise being opened right now
 
+  // agda-mode puts its panel into a group of its own (workbench.action.newGroupBelow) each
+  // time it starts, and VS Code restores that group, now empty, with the layout of the
+  // previous visit: left alone, every visit would add one more. Until Agda has started
+  // nothing of ours creates a group, so the empty ones are leftovers.
+  let agdaStarted = false;
+  async function closeEmptyGroups() {
+    if (agdaStarted) return;
+    const groups = vscode.window.tabGroups.all;
+    const empty = groups.filter((group) => group.tabs.length === 0);
+    if (empty.length === groups.length) empty.pop(); // the last group cannot be closed
+    if (empty.length) await vscode.window.tabGroups.close(empty, true);
+  }
+  context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabGroups(() => { closeEmptyGroups().catch(() => {}); }));
+  closeEmptyGroups().catch(() => {});
+
   async function loadWithAgda() {
+    agdaStarted = true;
     // agda-mode activates when the first Agda file is opened; its commands appear a moment later
     for (let attempt = 0; attempt < 40; attempt++) {
       try {
@@ -372,6 +388,7 @@ function activate(context) {
     try {
       // The file may exist already: VS Code restores the tabs of the previous session.
       const path = await fileSystem.materializeExercise(moduleName, ordinal);
+      await closeEmptyGroups().catch(() => {});
 
       const uri = vscode.Uri.from({ scheme: 'lpa', path });
       const editor = await vscode.window.showTextDocument(uri, { preview: false });
