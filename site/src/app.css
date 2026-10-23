@@ -138,6 +138,7 @@ pre.agda.header { padding: .4rem .8rem; font-size: .78rem; opacity: .75; backgro
 pre.agda .decl { position: absolute; margin-top: -4.5rem; }
 .kw { color: var(--kw); } .cm { color: var(--cm); } .st { color: var(--st); } .nu { color: var(--nu); } .pg { color: var(--sy); }
 .dt { color: var(--dt); } .ct { color: var(--ct); } .fn { color: var(--fn); } .fd { color: var(--fd); } .so { color: var(--so); } .sy { color: var(--sy); }
+.mo { color: var(--nu); } /* the module of an import: purple, as in Agda's own highlighting */
 .hole { background: var(--hole-bg); color: var(--hole-fg); border-radius: .2rem; padding: 0 .15em; }
 .copy-btn { position: absolute; top: .4rem; right: .4rem; opacity: 0; font: .75rem var(--font); border: 1px solid var(--line); background: var(--bg); border-radius: .4rem; padding: .15rem .5rem; cursor: pointer; color: var(--muted); }
 pre:hover .copy-btn, .copy-btn:focus { opacity: 1; }

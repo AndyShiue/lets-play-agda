@@ -58,12 +58,14 @@ run yet.
   tutorial), the parts of a mixfix name (`+` of `_+_`, `≡⟨` and `⟩` of `_≡⟨_⟩_`) count
   as the name, and a name that the declaration around the use binds itself (a
   parameter, a lambda variable, a variable in the patterns of a clause) is left
-  alone. Names of the libraries (`Cubical.…`, `Agda.Primitive`) are not declared by the
-  tutorial and do not link. `Set`, `Set₁`, `Setω` and `Prop` are built into Agda, so
+  alone. The module that an `import` names (`open import A.B.C`, `import A.B.C as X`)
+  links to its page, or for `Cubical.…` to the library's documentation (in a tab of its
+  own); `Agda.Primitive` has no page and is only coloured. Names of the libraries are
+  not declared by the tutorial and do not link. `Set`, `Set₁`, `Setω` and `Prop` are built into Agda, so
   there is no declaration to go to: they link to Agda's documentation (universe levels,
   `Prop`), in a tab of their own. The `∈` of `Σ[ x ∈ A ]` is notation and does not link
   to the tutorial's `_∈_`. Not available: the type tooltips, which need Agda. Measured on the
-  tutorial: 9842 uses of declared names, all linked (a name whose declaration is in a
+  tutorial: 9840 uses of declared names, all linked (a name whose declaration is in a
   block that the page hides would not link: there is none); the identifiers that
   are not linked are almost all local variables. `node scripts/build.mjs --link-report`
   lists the commonest. How right the links are is only spot-checked (`go`, `f`, `g`,

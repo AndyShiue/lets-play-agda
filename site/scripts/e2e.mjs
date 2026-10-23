@@ -262,10 +262,19 @@ try {
   check('the next click goes to its declaration', new URL(page.url()).hash === '#false', page.url());
   check('an exercise with nothing to hint at has no list', (await page.locator('#exercise-1 .hints').count()) === 0);
 
-  // a use on another page of a name declared on this one goes there
+  // the Operators page imports this one: the module name of the `open import` links to its page
   await page.click('a[data-module="Padova2025.ProgrammingBasics.Operators"]');
   await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.ProgrammingBasics.Operators');
-  const across = page.locator('#content pre.agda a[href^="Padova2025.ProgrammingBasics.Booleans.html#"]').first();
+  const importLink = page.locator('#content pre.agda a.mo[href="Padova2025.ProgrammingBasics.Booleans.html"]').first();
+  check('the module named by an `open import` is a link to its page', (await importLink.count()) === 1);
+  await importLink.click();
+  await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, MODULE);
+  check('and the link goes to that page', page.url().endsWith('Padova2025.ProgrammingBasics.Booleans.html'), page.url());
+  await page.click('a[data-module="Padova2025.ProgrammingBasics.Operators"]');
+  await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.ProgrammingBasics.Operators');
+
+  // a use on another page of a name declared on this one goes there
+  const across =page.locator('#content pre.agda a[href^="Padova2025.ProgrammingBasics.Booleans.html#"]').first();
   const acrossHref = await across.getAttribute('href');
   await across.click();
   await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, MODULE);

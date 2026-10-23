@@ -171,11 +171,13 @@ function bindersByLine(lines, isConstructor) {
  *   anchors?: Set<string>,
  *   noAnchors?: boolean,
  *   href?: (entry: object, token: string) => string | null,
+ *   moduleHref?: (module: string) => string | null,
  *   collect?: Map<string, {token: string, entry: object, href: string}>,
  *   stats?: {known: number, linked: number, unresolved: Map<string, number>},
  * }} options
  *   names: declared names that are in scope; anchors: ids already used on the page;
- *   href: where a use of a declared name links to (null: nowhere); collect: receives
+ *   href: where a use of a declared name links to (null: nowhere); moduleHref: the same for the
+ *   module that an `import` names; collect: receives
  *   every name the code links to, by the place it is declared in; stats: for the build's report
  */
 export function highlight(code, options = {}) {
@@ -196,6 +198,15 @@ export function highlight(code, options = {}) {
   const binders = bindersByLine(lines, (tok) => entryOf(tok)?.kind === 'constructor');
   let lineNo = 0;
   let inBinderBracket = false;
+  let afterImport = false; // the next token is the module that an `import` names
+
+  // `open import A.B.C`: the module's page (or, for a library, its documentation, in a tab of its own)
+  const moduleName = (name) => {
+    const href = options.moduleHref?.(name) ?? null;
+    if (href === null) return span('mo', name);
+    const external = /^https?:/.test(href);
+    return `<a class="mo" href="${esc(href).replace(/"/g, '&quot;')}"${external ? ' target="_blank" rel="noopener"' : ''}>${esc(name)}</a>`;
+  };
 
   // `Set` is built into Agda: there is no declaration of it to link to, so where the code links
   // (options.href is there) it links to Agda's documentation, in a tab of its own
@@ -237,6 +248,7 @@ export function highlight(code, options = {}) {
   lines.forEach((line, n) => {
     lineNo = n;
     inBinderBracket = false;
+    afterImport = false;
     const indent = line.length - line.trimStart().length;
     if (!inBlockComment && line.trim() !== '') {
       if (mode && indent <= modeIndent && !/^\s*field\s*$/.test(line)) mode = null;
@@ -307,11 +319,16 @@ export function highlight(code, options = {}) {
       } else if ((m = /^\d+(?![^\s.;{}()@"])/.exec(rest)) && (i === 0 || /[\s({]/.test(line[i - 1]))) {
         html += span('nu', m[0]);
         i += m[0].length;
+      } else if (afterImport && (m = /^[^\s;{}()@"]+/.exec(rest))) {
+        afterImport = false;
+        html += moduleName(m[0]);
+        i += m[0].length;
       } else if ((m = /^[^\s.;{}()@"]+/.exec(rest))) {
         const tok = m[0];
         // Σ[ x ∈ A ] B: the brackets are notation, and the ∈ in them is not the operator `_∈_`
         if (/\[$/.test(tok) && !entryOf(tok)) inBinderBracket = true;
         else if (tok === ']') inBinderBracket = false;
+        if (tok === 'import') afterImport = true;
         if (KEYWORDS.has(tok)) html += span('kw', tok);
         else if (SORTS.test(tok)) html += sort(tok);
         else if (tok === '?') html += span('hole', tok);

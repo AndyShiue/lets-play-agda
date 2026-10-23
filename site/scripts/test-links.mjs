@@ -99,6 +99,18 @@ test('Set, Set₁, Setω and Prop link to Agda\'s documentation where the code l
   assert.match(highlight('X : Set\n', { names: new Map() }), /<span class="so">Set<\/span>/);
 });
 
+test('the module an import names links to its page; a library module, to its documentation', () => {
+  const moduleHref = (name) => ({ 'Foo.Bar': 'Foo.Bar.html', 'Cubical.Foundations.Prelude': 'https://agda.github.io/cubical/Cubical.Foundations.Prelude.html' })[name] ?? null;
+  const html = highlight('open import Foo.Bar\nimport Cubical.Foundations.Prelude as P\nopen import Agda.Primitive using (Level)\n', { names: new Map(), href, moduleHref });
+  assert.match(html, /<span class="kw">open<\/span> <span class="kw">import<\/span> <a class="mo" href="Foo\.Bar\.html">Foo\.Bar<\/a>\n/);
+  assert.match(html, /<a class="mo" href="https:\/\/agda\.github\.io\/cubical\/Cubical\.Foundations\.Prelude\.html" target="_blank" rel="noopener">Cubical\.Foundations\.Prelude<\/a> <span class="kw">as<\/span>|<a class="mo" href="https:\/\/agda\.github\.io\/cubical\/Cubical\.Foundations\.Prelude\.html" target="_blank" rel="noopener">Cubical\.Foundations\.Prelude<\/a> as/);
+  assert.match(html, /<span class="mo">Agda\.Primitive<\/span> <span class="kw">using<\/span>/); // no page: coloured, not linked
+});
+
+test('a dotted name that no import names is not a module', () => {
+  assert.doesNotMatch(highlight('x = Foo.Bar\n', { names: new Map(), href, moduleHref: () => 'x.html' }), /class="mo"/);
+});
+
 test('the ∈ of Σ[ x ∈ A ] is notation, not the operator _∈_', () => {
   const html = highlight('f : Σ[ x ∈ A ] B\ng = a ∈ b\n', { names: names(entry('_∈_')), href });
   assert.deepEqual(links(html), ['∈→M.html#_∈_']); // only the one of the second line

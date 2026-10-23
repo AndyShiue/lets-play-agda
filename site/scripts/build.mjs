@@ -158,6 +158,12 @@ function renderPage(mod, linking = false) {
     if (!target || !target.ids.has(entry.name)) return null;
     return (entry.module === mod.name ? '' : hrefOf(entry.module)) + '#' + encodeURIComponent(entry.name);
   };
+  // the module an `import` names: the tutorial's own page, or the documentation of the Cubical library
+  const moduleHref = (name) => {
+    if (!linking) return null;
+    if (modules.has(name)) return name === mod.name ? null : hrefOf(name);
+    return /^Cubical\./.test(name) ? `https://agda.github.io/cubical/${name}.html` : null;
+  };
   const stats = linking ? linkStats : undefined;
 
   const pre = (cls, code) => `<pre class="${cls}"><code>${code}</code></pre>\n`;
@@ -178,8 +184,8 @@ function renderPage(mod, linking = false) {
         const solution = ex.solutionDisplay(b.text);
         const statementRefs = new Map();
         const solutionRefs = new Map();
-        const statementHtml = highlight(shown, { names, anchors, href, collect: statementRefs, stats });
-        const solutionHtml = highlight(solution, { names, noAnchors: true, href, collect: solutionRefs, stats });
+        const statementHtml = highlight(shown, { names, anchors, href, moduleHref, collect: statementRefs, stats });
+        const solutionHtml = highlight(solution, { names, noAnchors: true, href, moduleHref, collect: solutionRefs, stats });
         // what the solution uses of the earlier material, that the exercise does not show already
         const own = collectDeclarations(solution);
         const uses = [...solutionRefs].filter(([key, ref]) => !statementRefs.has(key) && !own.has(ref.entry.name));
@@ -198,7 +204,7 @@ ${hints}<div class="your-code" hidden><div class="your-code-title">Your solution
 </section>\n`;
       }
       const header = b === firstAgda && /^\s*(\{-#|module\s)/.test(b.text);
-      return pre(header ? 'agda header' : 'agda', highlight(b.text, { names, anchors, href, stats }));
+      return pre(header ? 'agda header' : 'agda', highlight(b.text, { names, anchors, href, moduleHref, stats }));
     },
   };
 
