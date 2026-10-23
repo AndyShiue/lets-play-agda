@@ -86,7 +86,7 @@ async function dbPut(key, value) {
 
 // What the reader edits is the part between these markers; the rest of the
 // file is regenerated from the tutorial source whenever the exercise is opened.
-const START = '-- EXERCISE STARTS\n';
+const START = '-- EXERCISE STARTS HERE\n'; // not '-- EXERCISE STARTS': that is the first line of the file
 const END = '-- EXERCISE ENDS';
 function regionOf(text) {
   const a = text.indexOf(START);
@@ -368,7 +368,8 @@ function activate(context) {
   // The reader sees the exercise as the page shows it (the text between the markers): the
   // earlier code of the module above it and the tests below it are folded away, and a click
   // on the fold shows them. The first line of a fold stays visible: for the code above that
-  // is the empty first line of the file (see buildExerciseFile), for the tests the END marker.
+  // is the first line of the file, `-- EXERCISE STARTS` (see buildExerciseFile), for the
+  // tests the END marker.
   const FOLD_START = START.trimEnd();
   context.subscriptions.push(vscode.languages.registerFoldingRangeProvider({ scheme: 'lpa' }, {
     provideFoldingRanges(document) {

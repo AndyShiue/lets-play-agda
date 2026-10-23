@@ -59,9 +59,11 @@ run yet.
   The reader's code is kept in the browser (IndexedDB), progress in localStorage;
   *Download backup* / *Restore* in the sidebar export and import it. The file Agda
   checks holds the module's earlier code and the exercise's tests as well; the editor
-  folds them away (a folding range provider in the editor's extension, and an empty first
-  line of the file for the upper fold to collapse into), so that what is visible is the
-  exercise exactly as the page shows it. A click on a fold shows the rest.
+  folds them away (a folding range provider in the editor's extension; the first line of
+  a fold stays visible, so the file starts with a line `-- EXERCISE STARTS` for the code
+  above the exercise to fold into, and the tests fold into `-- EXERCISE ENDS`), so that
+  what is visible is the exercise exactly as the page shows it. A click on a fold shows
+  the rest.
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a
@@ -91,11 +93,11 @@ run yet.
 ## Known gaps
 
 * The reader's edits and exercise progress live only in this browser.
-* The two marker lines around the exercise (`-- EXERCISE STARTS` / `ENDS`) are ordinary
-  text. Folded, they are mostly out of reach, but Backspace at the start of the first
-  line joins it to the first marker (the fold opens and the damage is visible), and
-  typing on the lines the cursor can step onto above and below the exercise changes
-  them. Undo repairs it.
+* The marker lines around the exercise (`-- EXERCISE STARTS HERE`, hidden by the fold, and
+  `-- EXERCISE ENDS`) are ordinary text. Backspace at the start of the first line joins
+  it to the hidden marker (the fold opens and the damage is visible), and typing into
+  the `-- EXERCISE ENDS` line, which the cursor can step onto, breaks the fold below.
+  Undo repairs it.
 * Agda's type-checking runs in the browser from the sources: the first start of
   the editor downloads ~30 MB (cached afterwards), and the first load of an
   exercise type-checks the modules it imports (seconds to ~20 s for the cubical

@@ -260,7 +260,11 @@ try {
   // without whitespace: the editor wraps long lines, and the page's block has a "Copy" button
   const norm = (s) => s.replace(/\s+/g, '');
   const pageCode = norm(await page.locator('#exercise-1 > pre.agda').first().innerText()).replace(/Copy$/, '');
-  const editorCode = norm((await editorText(page)).replace('-- EXERCISE ENDS', ''));
+  // (besides the exercise, the two lines the folds hang on)
+  const editorCode = norm((await editorText(page)).replace('-- EXERCISE STARTS', '').replace('-- EXERCISE ENDS', ''));
+  const visibleLines = (await editorText(page)).split('\n').map((line) => line.trim()).filter(Boolean);
+  check('the folds hang on `-- EXERCISE STARTS` above and `-- EXERCISE ENDS` below the exercise',
+    visibleLines[0] === '-- EXERCISE STARTS' && visibleLines.at(-1) === '-- EXERCISE ENDS', JSON.stringify([visibleLines[0], visibleLines.at(-1)]));
   check('the code above the exercise and the tests below it are folded', (await folds()) === 2, `${await folds()} folds`);
   check('what the editor shows is exactly what the page shows for the exercise', editorCode === pageCode, `editor: ${editorCode.slice(0, 90)} | page: ${pageCode.slice(0, 90)}`);
   const goals = await waitAgda(page, /All Goals|Error/, 240);

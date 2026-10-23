@@ -156,13 +156,15 @@
    * (Exercise.…) so that it never clashes with the solution module that other
    * modules import.
    *
-   * The file starts with an empty line: the editor folds everything above the
-   * exercise, and the first line of a fold stays visible. (Likewise the tests
-   * fold into the `-- EXERCISE ENDS` line.)
+   * The editor folds everything above the exercise and the tests below it, and the
+   * first line of a fold stays visible: that is why the file starts with a line of
+   * its own, `-- EXERCISE STARTS` (the code above the exercise folds into it), and
+   * why the tests fold into the `-- EXERCISE ENDS` line. The exercise itself begins
+   * after `-- EXERCISE STARTS HERE`, which the fold hides.
    */
   function buildExerciseFile(blocks, blockIndex, moduleName, ordinal, options) {
     const solved = !!(options && options.solved);
-    let text = '\n';
+    let text = '-- EXERCISE STARTS\n';
     for (const b of blocks) {
       if (b.kind !== 'agda' || b.index > blockIndex) continue;
       if (b.index < blockIndex) {
@@ -178,7 +180,7 @@
       } else {
         ({ shown, tests } = holeify(b.text));
       }
-      text += '-- EXERCISE STARTS\n' + shown + '-- EXERCISE ENDS\n';
+      text += '-- EXERCISE STARTS HERE\n' + shown + '-- EXERCISE ENDS\n';
       if (tests) text += '\n' + expandTests(tests);
     }
     // only the name: the module may have parameters, `module X (A : Set) where`
@@ -189,7 +191,7 @@
       text,
       path: exercisePath(moduleName, ordinal),
       moduleName: exerciseModuleName(moduleName, ordinal),
-      startLine: lines.indexOf('-- EXERCISE STARTS') + 1, // 1-based, the marker line
+      startLine: lines.indexOf('-- EXERCISE STARTS HERE') + 1, // 1-based, the marker line
       endLine: lines.indexOf('-- EXERCISE ENDS') + 1,
     };
   }
