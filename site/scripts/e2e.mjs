@@ -197,6 +197,33 @@ try {
   check('welcome page renders with the table of contents', (await page.locator('.toc li.page a').count()) > 50);
   check('the English pages link to their translation', (await page.getAttribute('a.lang-switch', 'href')) === 'zh-TW/index.html');
 
+  // In a list of the table of contents the texts of the entries start at the same place, whatever the entry is: a
+  // section (a triangle), a page (a circle) or a page under construction (nothing) each have a column for their mark.
+  const tocTextLefts = () => page.evaluate(() => {
+    const firstLetter = (element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const at = node.textContent.search(/\S/);
+        if (at < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        return range.getBoundingClientRect().left;
+      }
+      return null;
+    };
+    const wip = [...document.querySelectorAll('.toc li.wip')].find((li) => !li.closest('details:not([open])')); // one that is shown (not inside a closed section)
+    return [...wip.parentElement.children].map((li) => ({
+      kind: li.className,
+      left: firstLetter(li.classList.contains('section') ? li.querySelector('summary') : li.classList.contains('page') ? li.querySelector('a') : li),
+    }));
+  });
+  const tocAligned = (lefts) => new Set(lefts.map((e) => e.kind)).size === 3 && Math.max(...lefts.map((e) => e.left)) - Math.min(...lefts.map((e) => e.left)) <= 1;
+  const tocDetail = (lefts) => JSON.stringify(lefts.map((e) => [e.kind, Math.round(e.left * 10) / 10]));
+  const lefts = await tocTextLefts();
+  check('in the table of contents the texts of sections, pages and pages under construction start at the same place', tocAligned(lefts), tocDetail(lefts));
+  await page.locator('.toc li.wip >> visible=true').first().locator('xpath=ancestor::ol[1]').screenshot({ path: path.join(OUT, '1-toc-alignment.png') });
+
   // On a phone the page must not be wider than the screen: its title once had non-breaking
   // spaces between the words, so it could not wrap, and pushed the whole page out to the right.
   await page.setViewportSize({ width: 412, height: 839 });
@@ -592,6 +619,8 @@ try {
   check('a hint that is folded away offers to be shown, in Chinese', (await page.locator('.collapse-toggle').first().innerText()).includes('顯示'));
   check('the prose is translated, the code is the original (module name with the translation\'s prefix)',
     (await page.locator('#content pre.agda').first().innerText()).includes('module Padova2025-zh-TW.ProgrammingBasics.Booleans'));
+  const zhLefts = await tocTextLefts();
+  check('the same in the translation\'s table of contents', tocAligned(zhLefts), tocDetail(zhLefts));
   check('the table of contents lists the translation\'s pages', (await page.locator('.toc li.page a').count()) > 50
     && (await page.locator(`.toc li.page a[data-module="${ZH_MODULE}"]`).innerText()) === '布林值');
   // the link to the page in the other language is a page load of its own, to the same page
