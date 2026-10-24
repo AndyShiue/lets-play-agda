@@ -110,8 +110,8 @@ the build script marks such a build with `DEV-BUILD-DO-NOT-PUBLISH.txt`.
 | | |
 |---|---|
 | [`Padova2025/`](Padova2025) | the tutorial: literate Agda in Markdown (`*.lagda.md`), CC BY-SA |
-| [`padova2025.agda-lib`](padova2025.agda-lib) | Agda library file, for working with a local Agda |
-| [`Padova2025-zh-TW/`](Padova2025-zh-TW) | the Traditional Chinese translation of the tutorial, same file names (see below); its [`padova2025-zh-TW.agda-lib`](Padova2025-zh-TW/padova2025-zh-TW.agda-lib) is a copy of the one above |
+| [`padova2025.agda-lib`](padova2025.agda-lib) | Agda library file, for working with a local Agda; the one library file of both trees (see below) |
+| [`Padova2025-zh-TW/`](Padova2025-zh-TW) | the Traditional Chinese translation of the tutorial, same file names (see below) |
 | [`site/`](site/README.md) | the site generator, the client code (navigation, progress, the editor panel) and the end-to-end test |
 | [`editor/`](editor/README.md) | the in-browser editor: VS Code for the Web, agda-mode, Agda as WebAssembly, and a service worker |
 | [`.github/workflows/pages.yml`](.github/workflows/pages.yml) | build and deployment |
@@ -194,15 +194,18 @@ English ones, and a button in the top bar (`EN` / `繁中`) goes to the same pag
   `extract` and `apply` are for working on a batch of files (see the header of the script).
   Whether the Chinese is *good* is nothing a script can tell: **the translation was drafted with
   an AI (Claude) and has not been proofread by a person.**
-* **Agda.** `padova2025-zh-TW.agda-lib` is a copy of `padova2025.agda-lib`. It is inside the
-  folder because two `.agda-lib` files in one directory are an error in Agda. According to
-  Agda's documentation, the library of a file is found from the file's module name (the root
-  of `Padova2025-zh-TW.X.Y` is the directory above `Padova2025-zh-TW/`, here the repository
-  root), so the translation's modules load with the library at the root. Tested in the site's
-  editor (Agda 2.8.0 as WebAssembly, `padova2025.agda-lib` at the workspace root, both trees
-  in it): the first exercise of `Booleans` and the first of `Operators` (which imports the
-  translation's `Booleans`) type-check as they should. **Not tested:** the other exercises, and
-  a native Agda on the files of the repository.
+* **Agda.** There is one library file, [`padova2025.agda-lib`](padova2025.agda-lib), at the root of the
+  repository, and it serves both trees: its `include: .` is the directory above `Padova2025/` and
+  `Padova2025-zh-TW/`, and the modules of the two have different names (`Padova2025.…`,
+  `Padova2025-zh-TW.…`), so they do not clash. There cannot be a library file of its own in either
+  folder: Agda (2.6.3 and later) refuses to load a file when there is an `.agda-lib` file between the
+  root of its module hierarchy and the file (`LibTooFarDown`; seen with Agda 2.8.0 in the site's editor
+  with the library file in `Padova2025/`), and a second one at the root would be an error, too
+  (several `.agda-lib` files in one directory). `translate.mjs check` complains about any library file
+  below the root. Tested in the site's editor (Agda 2.8.0 as WebAssembly, `padova2025.agda-lib` at the
+  workspace root, both trees in it): the first exercise of `Booleans` and the first of `Operators`
+  (which imports the translation's `Booleans`) type-check as they should. **Not tested:** the other
+  exercises, and a native Agda on the files of the repository.
 * **The site.** `site/scripts/build-all.mjs` builds the English site and then the translation into
   `dist/zh-TW/` (`build.mjs --lang zh-TW --source ../Padova2025-zh-TW --root ../`). Pages keep
   the original's names and the ids of their headings are the original's too (so that links and
@@ -221,7 +224,7 @@ Limitations of the translation:
   stored up front.
 * The archives of the translation (`Padova2025-zh-TW.zip`, with holes, and
   `Padova2025-zh-TW-solutions.zip`) hold its folder and the library file at the root, as the
-  English ones hold theirs.
+  English ones hold their folder and the same file.
 * The upstream text says that Cohen's forcing was a technique of the 1970s (Cohen's work was
   from 1963); the translation keeps what the original says.
 

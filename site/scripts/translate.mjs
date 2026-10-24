@@ -3,8 +3,7 @@
  * Tools for the Traditional Chinese translation of the tutorial:
  * ../Padova2025-zh-TW/ is the translation of ../Padova2025/, file for file.
  *
- *   node scripts/translate.mjs skeleton           create what is missing: the files (English text, code
- *                                                 ready) and the .agda-lib
+ *   node scripts/translate.mjs skeleton           create the files that are missing (English text, code ready)
  *   node scripts/translate.mjs extract [files…]   print the paragraphs that are not translated yet
  *   node scripts/translate.mjs apply <file…>      put translated paragraphs (the same format) into the files
  *   node scripts/translate.mjs status             how much is translated
@@ -27,7 +26,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
 const SRC = path.join(repo, 'Padova2025');
 const DST = path.join(repo, 'Padova2025-zh-TW');
-const LIB = 'padova2025-zh-TW.agda-lib';
 
 // ---------------------------------------------------------------------------
 // blocks
@@ -125,9 +123,7 @@ function skeleton() {
     fs.writeFileSync(dst, codeOf(read(path.join(SRC, rel)))); // the original's text, to be translated, and its code
     created++;
   }
-  // the same library file, byte for byte
-  fs.copyFileSync(path.join(repo, 'padova2025.agda-lib'), path.join(DST, LIB));
-  console.log(`${created} files created in ${path.relative(repo, DST)}; ${LIB} copied`);
+  console.log(`${created} files created in ${path.relative(repo, DST)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,8 +239,16 @@ function check() {
   const chinese = new Set(fs.existsSync(DST) ? listFiles(DST) : []);
   for (const f of english) if (!chinese.has(f)) problems.push(`${f}: missing in the translation`);
   for (const f of chinese) if (!english.has(f)) problems.push(`${f}: no such file in the original`);
-  if (!fs.existsSync(path.join(DST, LIB)) || !fs.readFileSync(path.join(DST, LIB)).equals(fs.readFileSync(path.join(repo, 'padova2025.agda-lib')))) {
-    problems.push(`${LIB}: missing, or not the same as padova2025.agda-lib`);
+  // The library file is the one at the root of the repository, which serves both trees (their modules are named
+  // `Padova2025.…` and `Padova2025-zh-TW.…`). A file below the root, in the folder of a tree, is an error in Agda
+  // (LibTooFarDown), and a second one at the root is one, too (several .agda-lib files in one directory).
+  for (const dir of [SRC, DST]) {
+    (function look(d) {
+      for (const e of fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : []) {
+        if (e.isDirectory()) look(path.join(d, e.name));
+        else if (e.name.endsWith('.agda-lib')) problems.push(`${path.relative(repo, path.join(d, e.name))}: an .agda-lib file below the root of the modules; Agda refuses to load the files under it (LibTooFarDown)`);
+      }
+    })(dir);
   }
   for (const rel of [...english].filter((f) => chinese.has(f))) {
     let en;

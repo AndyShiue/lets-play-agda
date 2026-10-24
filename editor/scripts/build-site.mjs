@@ -170,10 +170,10 @@ for (const name of fs.readdirSync(ext)) {
 console.log('• workspace');
 const ws = path.join(out, 'workspace');
 copy(path.join(repoRoot, 'Padova2025'), path.join(ws, 'Padova2025'), (r) => !r.endsWith('.agdai'));
-// the translation: its modules are `Padova2025-zh-TW.…`, found by Agda through the same library file
-// (its own padova2025-zh-TW.agda-lib is not needed: Agda finds a file's library from the module name)
+// the translation: its modules are `Padova2025-zh-TW.…`; the library file at the root serves both trees
+// (a library file inside either folder would be an error in Agda: LibTooFarDown)
 if (fs.existsSync(path.join(repoRoot, 'Padova2025-zh-TW'))) {
-  copy(path.join(repoRoot, 'Padova2025-zh-TW'), path.join(ws, 'Padova2025-zh-TW'), (r) => !r.endsWith('.agdai') && !r.endsWith('.agda-lib'));
+  copy(path.join(repoRoot, 'Padova2025-zh-TW'), path.join(ws, 'Padova2025-zh-TW'), (r) => !r.endsWith('.agdai'));
 }
 fs.copyFileSync(path.join(repoRoot, 'padova2025.agda-lib'), path.join(ws, 'padova2025.agda-lib'));
 copy(inputs.cubical, path.join(ws, 'cubical'), (r) =>
