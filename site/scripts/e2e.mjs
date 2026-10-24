@@ -31,6 +31,21 @@ const require = createRequire(import.meta.url);
 let chromium;
 try { ({ chromium } = require('playwright-core')); } catch { ({ chromium } = require('playwright')); }
 const exercises = require('./lib/exercises.cjs');
+const languages = require('./lib/languages.cjs');
+
+// The languages that are there (languages.json, the folders), and the words of their translations (i18n/): the checks
+// of a translation read what a page should say from there, so a language added to the registry is tested like the others.
+const here = languages.present(repo);
+const translations = here.filter((language) => !language.base);
+const readWords = (code) => JSON.parse(fs.readFileSync(path.join(root, 'i18n', code + '.json'), 'utf8'));
+const baseWords = readWords(languages.base.code);
+/** Where the same module is in a language: a page file name, from a page of `current` (to `other`, also a directory). */
+const pageFile = (language, rest) => (rest === '.Welcome' ? 'index.html' : `${language.prefix}${rest}.html`);
+const languageItemsOf = (current, rest) => here.map((other) => ({
+  text: other.name,
+  href: (other === current ? '' : (current.base ? '' : '../') + (other.base ? '' : other.dir + '/')) + pageFile(other, rest),
+  current: other === current,
+}));
 
 const PORT = Number(process.env.E2E_PORT ?? 8096);
 const BASE = '/lets-play-agda/';
@@ -45,8 +60,6 @@ const SERVED = path.join(root, '.cache', 'e2e-dist');
 
 const MODULE = 'Padova2025.ProgrammingBasics.Booleans';
 const PAGE = `${URL_}Padova2025.ProgrammingBasics.Booleans.html`;
-const ZH_MODULE = 'Padova2025-zh-TW.ProgrammingBasics.Booleans';
-const ZH_PAGE = `${URL_}zh-TW/${ZH_MODULE}.html`;
 const SOLVED_KEY = `lpa:solved:${MODULE}/1`;
 
 const t0 = Date.now();
@@ -195,7 +208,25 @@ try {
   await page.goto(URL_);
   await page.waitForSelector('#content');
   check('welcome page renders with the table of contents', (await page.locator('.toc li.page a').count()) > 50);
-  check('the English pages link to their translation', (await page.getAttribute('a.lang-switch', 'href')) === 'zh-TW/index.html');
+  // The language menu: a globe, and the list of the languages (English first) only after it is pressed.
+  const languageItems = () => page.$$eval('#lang-list a', (links) => links.map((a) => ({ text: a.textContent.trim(), href: a.getAttribute('href'), current: a.getAttribute('aria-current') === 'true' })));
+  check('the language list is not shown until the globe is pressed',
+    (await page.locator('#lang-toggle').isVisible()) && !(await page.locator('#lang-list').isVisible()) && (await page.getAttribute('#lang-toggle', 'aria-expanded')) === 'false');
+  await page.click('#lang-toggle');
+  const welcomeLanguages = await languageItems();
+  check('then it lists the languages of the registry, English first, each to this page in that language, the current one marked',
+    (await page.locator('#lang-list').isVisible()) && (await page.getAttribute('#lang-toggle', 'aria-expanded')) === 'true'
+    && JSON.stringify(welcomeLanguages) === JSON.stringify(languageItemsOf(languages.base, '.Welcome')),
+    JSON.stringify(welcomeLanguages));
+  await page.screenshot({ path: path.join(OUT, '1-language-menu.png'), clip: { x: 940, y: 0, width: 420, height: 220 } });
+  await page.keyboard.press('Escape');
+  check('Escape closes the list', !(await page.locator('#lang-list').isVisible()));
+  await page.click('#lang-toggle');
+  await page.click('#content h1');
+  check('so does a click somewhere else', !(await page.locator('#lang-list').isVisible()));
+  await page.click('#lang-toggle');
+  await page.click('#lang-list a[aria-current="true"]');
+  check('and a click on the language that is shown already (it stays on the page)', !(await page.locator('#lang-list').isVisible()) && new URL(page.url()).pathname.endsWith('/'));
 
   // In a list of the table of contents the texts of the entries start at the same place, whatever the entry is: a
   // section (a triangle), a page (a circle) or a page under construction (nothing) each have a column for their mark.
@@ -235,6 +266,9 @@ try {
   await page.click('a[data-module="' + MODULE + '"]');
   await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, MODULE);
   check('navigation without reload (URL changed, sidebar follows)', page.url().endsWith('Padova2025.ProgrammingBasics.Booleans.html') && (await page.getAttribute('.toc a[aria-current="page"]', 'data-module')) === MODULE);
+  const navigatedLanguages = await languageItems();
+  check('after navigating without reload the language links are to the page that is shown',
+    JSON.stringify(navigatedLanguages) === JSON.stringify(languageItemsOf(languages.base, '.ProgrammingBasics.Booleans')), JSON.stringify(navigatedLanguages));
   check('page has its 3 exercises', (await page.locator('.exercise').count()) === 3);
   await page.screenshot({ path: path.join(OUT, '1-reading.png') });
 
@@ -605,54 +639,73 @@ try {
   log('caches (name: entries):', JSON.stringify(dump));
   check('old caches are removed, the (unchanged) VS Code files stay cached', cleaned, Object.keys(dump).join(', '));
 
-  // ---- 4c. the translation (zh-TW), a site of its own in a directory of this one ------------------
-  log('--- 4c. the translation');
-  await page.goto(ZH_PAGE);
-  await page.waitForSelector('#exercise-1');
-  check('a translated page: language, title and heading are Chinese',
-    (await page.getAttribute('html', 'lang')) === 'zh-Hant-TW' && /^布林值/.test(await page.title()) && (await page.locator('#content h1').innerText()).startsWith('布林值'));
-  check('its sections keep the ids of the original (links and bookmarks work in both)',
-    (await page.locator('#content h2#example-constants').innerText()).includes('範例：常數'));
-  check('the words around the tutorial are Chinese, too',
-    (await page.locator('#exercise-1 .badge').innerText()) === '習題 1' && (await page.locator('.pager .next span').innerText()) === '下一頁'
-    && (await page.getAttribute('#search', 'placeholder')) === '搜尋…' && (await page.locator('#exercise-2 details.solution > summary').innerText()) === '參考解答');
-  check('a hint that is folded away offers to be shown, in Chinese', (await page.locator('.collapse-toggle').first().innerText()).includes('顯示'));
-  check('the prose is translated, the code is the original (module name with the translation\'s prefix)',
-    (await page.locator('#content pre.agda').first().innerText()).includes('module Padova2025-zh-TW.ProgrammingBasics.Booleans'));
-  const zhLefts = await tocTextLefts();
-  check('the same in the translation\'s table of contents', tocAligned(zhLefts), tocDetail(zhLefts));
-  check('the table of contents lists the translation\'s pages', (await page.locator('.toc li.page a').count()) > 50
-    && (await page.locator(`.toc li.page a[data-module="${ZH_MODULE}"]`).innerText()) === '布林值');
-  // the link to the page in the other language is a page load of its own, to the same page
-  const toEnglish = page.locator('a.lang-switch');
-  check('the translation links to the same page in English', (await toEnglish.getAttribute('href')) === '../Padova2025.ProgrammingBasics.Booleans.html', await toEnglish.getAttribute('href'));
-  await Promise.all([page.waitForEvent('load'), toEnglish.click()]);
-  check('and that link goes to the English page', page.url() === PAGE && (await page.getAttribute('html', 'lang')) === 'en', page.url());
-  check('which links back to the translation', (await page.getAttribute('a.lang-switch', 'href')) === `zh-TW/${ZH_MODULE}.html`);
-  // the editor is the main site's (../editor/), and opens the exercise of the page it was asked on
-  await page.goto(ZH_PAGE);
-  await page.waitForSelector('#exercise-1');
-  await openExercise(page);
-  await waitFor('editor iframe (translation)', async () => editorFrame(page), 60);
-  check('the editor of a translated page is the main site\'s', new URL(editorFrame(page).url()).pathname === `${BASE}editor/`, editorFrame(page).url());
-  await waitFor('exercise file (translation)', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="/Exercise-zh-TW/ProgrammingBasics/Booleans/Ex1.agda"]').count()) > 0, 120);
-  const fromTranslation = await waitAgda(page, /All Done|All Goals|Error/, 240);
-  check('Agda checks the exercise opened from a translated page', /All Done|All Goals/.test(fromTranslation), fromTranslation.slice(0, 80));
-  // the exercise file is the translation's: its comments are Chinese, and it is of the translation's module
-  const zhText = await editorText(page);
-  check('the file in the editor is the translation\'s: Chinese comment, module of the translation', /輸入/.test(zhText) && /idBool/.test(zhText), zhText.replace(/\s+/g, ' ').slice(0, 90));
-  // an exercise of a module that imports another module of the translation: Agda finds it through the library file at the root
-  await page.click(`a[data-module="Padova2025-zh-TW.ProgrammingBasics.Operators"]`);
-  await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025-zh-TW.ProgrammingBasics.Operators');
-  await openExercise(page);
-  await waitFor('exercise file (translation, with imports)', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="/Exercise-zh-TW/ProgrammingBasics/Operators/Ex1.agda"]').count()) > 0, 120);
-  const withImports = await waitAgdaChange(page, fromTranslation, /All Done|All Goals|Error/, 240);
-  // (an exercise that has not been solved has holes, and its tests cannot be checked yet: Agda lists the two goals
-  // and one error, unsolved constraints; what would be wrong is a module that is not found, or named otherwise than its file)
-  check('Agda checks an exercise whose module imports the translation\'s other modules: it lists the goals',
-    /\?0 : Bool/.test(withImports) && /\?1 : Bool/.test(withImports) && !/Failed to find source|does not match|Not in scope|should be|not found/i.test(withImports),
-    withImports.slice(0, 300));
-  await page.screenshot({ path: path.join(OUT, '4c-translation.png') });
+  // ---- 4c. the translations, each a site of its own in a directory of this one --------------------
+  log('--- 4c. the translations');
+  let lastOperatorsFile = null; // (the exercise file that is open at the end)
+  for (const language of translations) {
+    const words = readWords(language.code);
+    const ui = { ...baseWords.ui, ...words.ui };
+    const sample = words.sample;
+    if (!sample) throw new Error(`i18n/${language.code}.json needs a "sample" (words of its pages that the end-to-end test looks for)`);
+    const name = `${language.name}:`;
+    const booleans = `${language.prefix}.ProgrammingBasics.Booleans`;
+    const operators = `${language.prefix}.ProgrammingBasics.Operators`;
+    const translatedPage = `${URL_}${language.dir}/${booleans}.html`;
+    const exerciseFile = (rest) => `/${language.exercisePrefix}${rest}/Ex1.agda`;
+
+    await page.goto(translatedPage);
+    await page.waitForSelector('#exercise-1');
+    check(`${name} language, title and heading are the translation's`,
+      (await page.getAttribute('html', 'lang')) === language.htmlLang && (await page.title()).startsWith(sample.title) && (await page.locator('#content h1').innerText()).startsWith(sample.title));
+    check(`${name} its sections keep the ids of the original (links and bookmarks work in both)`,
+      (await page.locator('#content h2#example-constants').innerText()).includes(sample.constantsHeading));
+    check(`${name} the words around the tutorial are the translation's, too`,
+      (await page.locator('#exercise-1 .badge').innerText()) === `${ui.exercise} 1` && (await page.locator('.pager .next span').innerText()) === ui.next
+      && (await page.getAttribute('#search', 'placeholder')) === ui.searchPlaceholder && (await page.locator('#exercise-2 details.solution > summary').innerText()) === ui.referenceSolution);
+    check(`${name} a hint that is folded away offers to be shown, in the language`, (await page.locator('.collapse-toggle').first().innerText()).includes(sample.hintToggle));
+    check(`${name} the prose is translated, the code is the original (module name with the translation's prefix)`,
+      (await page.locator('#content pre.agda').first().innerText()).includes(`module ${booleans}`));
+    const translatedLefts = await tocTextLefts();
+    check(`${name} the same in the translation's table of contents`, tocAligned(translatedLefts), tocDetail(translatedLefts));
+    check(`${name} the table of contents lists the translation's pages`, (await page.locator('.toc li.page a').count()) > 50
+      && (await page.locator(`.toc li.page a[data-module="${booleans}"]`).innerText()) === sample.title);
+    // the links of the language menu are page loads of their own, to the same page
+    const translatedLanguages = await languageItems();
+    check(`${name} the list of languages: those of the registry, English first, each to this page in that language, this one shown`,
+      JSON.stringify(translatedLanguages) === JSON.stringify(languageItemsOf(language, '.ProgrammingBasics.Booleans')), JSON.stringify(translatedLanguages));
+    check(`${name} and the globe is named in the language`, (await page.getAttribute('#lang-toggle', 'aria-label')) === ui.language);
+    await page.click('#lang-toggle');
+    await Promise.all([page.waitForEvent('load'), page.click(`#lang-list a[hreflang="${languages.base.htmlLang}"]`)]);
+    check(`${name} choosing the base language goes to its page`, page.url() === PAGE && (await page.getAttribute('html', 'lang')) === languages.base.htmlLang, page.url());
+    const backLanguages = await languageItems();
+    check(`${name} whose list links back to the translation`,
+      JSON.stringify(backLanguages) === JSON.stringify(languageItemsOf(languages.base, '.ProgrammingBasics.Booleans')), JSON.stringify(backLanguages));
+    // the editor is the main site's (../editor/), and opens the exercise of the page it was asked on
+    await page.goto(translatedPage);
+    await page.waitForSelector('#exercise-1');
+    await openExercise(page);
+    await waitFor(`editor iframe (${language.code})`, async () => editorFrame(page), 60);
+    check(`${name} the editor of a translated page is the main site's`, new URL(editorFrame(page).url()).pathname === `${BASE}editor/`, editorFrame(page).url());
+    await waitFor(`exercise file (${language.code})`, async () => (await editorFrame(page).locator(`.monaco-editor[data-uri*="${exerciseFile('/ProgrammingBasics/Booleans')}"]`).count()) > 0, 120);
+    const fromTranslation = await waitAgda(page, /All Done|All Goals|Error/, 240);
+    check(`${name} Agda checks the exercise opened from a translated page`, /All Done|All Goals/.test(fromTranslation), fromTranslation.slice(0, 80));
+    // the exercise file is the translation's: its comments are in the language, and it is of the translation's module
+    const translatedText = await editorText(page);
+    check(`${name} the file in the editor is the translation's: a comment in the language, the code`, translatedText.includes(sample.codeComment) && /idBool/.test(translatedText), translatedText.replace(/\s+/g, ' ').slice(0, 90));
+    // an exercise of a module that imports another module of the translation: Agda finds it through the library file at the root
+    await page.click(`a[data-module="${operators}"]`);
+    await page.waitForFunction((m) => document.querySelector('#content')?.dataset.module === m, operators);
+    await openExercise(page);
+    lastOperatorsFile = exerciseFile('/ProgrammingBasics/Operators');
+    await waitFor(`exercise file (${language.code}, with imports)`, async () => (await editorFrame(page).locator(`.monaco-editor[data-uri*="${lastOperatorsFile}"]`).count()) > 0, 120);
+    const withImports = await waitAgdaChange(page, fromTranslation, /All Done|All Goals|Error/, 240);
+    // (an exercise that has not been solved has holes, and its tests cannot be checked yet: Agda lists the two goals
+    // and one error, unsolved constraints; what would be wrong is a module that is not found, or named otherwise than its file)
+    check(`${name} Agda checks an exercise whose module imports the translation's other modules: it lists the goals`,
+      /\?0 : Bool/.test(withImports) && /\?1 : Bool/.test(withImports) && !/Failed to find source|does not match|Not in scope|should be|not found/i.test(withImports),
+      withImports.slice(0, 300));
+    await page.screenshot({ path: path.join(OUT, `4c-translation-${language.code}.png`) });
+  }
 
   // ---- 4d. one exercise at a time ----------------------------------------------------------------
   log('--- 4d. opening an exercise closes the files of the exercises before it');
@@ -663,10 +716,10 @@ try {
     asker.onmessage = ({ data }) => { if (data?.t === 'tabs-are') { clearTimeout(timer); asker.close(); resolve(data.paths); } };
     asker.postMessage({ t: 'tabs' });
   }));
-  const OPERATORS_FILE = '/Exercise-zh-TW/ProgrammingBasics/Operators/Ex1.agda';
+  const OPERATORS_FILE = lastOperatorsFile; // (without a translation: only the English exercise is open)
   const onlyFile = (path_) => async () => JSON.stringify(await openFiles()) === JSON.stringify([path_]);
   // (the English Booleans exercise and the translation's were opened before; they are closed, not gone)
-  const closedOthers = await waitFor('the files of the earlier exercises to be closed', onlyFile(OPERATORS_FILE), 30).then(() => true, () => false);
+  const closedOthers = OPERATORS_FILE ? await waitFor('the files of the earlier exercises to be closed', onlyFile(OPERATORS_FILE), 30).then(() => true, () => false) : true;
   check('opening an exercise closes the files opened for the exercises before it: its own is the only one open', closedOthers, JSON.stringify(await openFiles()));
   // closing and reopening the editor: the file is still there
   await page.click('[data-action="editor-close"]');
@@ -674,7 +727,7 @@ try {
   await page.click('#editor-toggle');
   await waitFor('the editor to come back', async () => (await page.locator('#app.editor-open').count()) === 1 && editorFrame(page), 30);
   const stillThere = await waitFor('the exercise file after closing and reopening the editor',
-    async () => (await editorFrame(page).locator(`.monaco-editor[data-uri*="${OPERATORS_FILE}"]`).count()) > 0 && (await onlyFile(OPERATORS_FILE)()), 60).then(() => true, () => false);
+    async () => (await editorFrame(page).locator(`.monaco-editor[data-uri*="${OPERATORS_FILE ?? '/Exercise/ProgrammingBasics/Booleans/Ex1.agda'}"]`).count()) > 0 && (await onlyFile(OPERATORS_FILE ?? '/Exercise/ProgrammingBasics/Booleans/Ex1.agda')()), 60).then(() => true, () => false);
   check('after closing and reopening the editor the file of the exercise is still open', stillThere, JSON.stringify(await openFiles()));
   // an exercise that was left comes back as it was left: the English one, with the solution the reader had written
   await page.goto(PAGE);
@@ -708,9 +761,11 @@ try {
   await page.click('a[data-module="Padova2025.ProgrammingBasics.Operators"]');
   await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.ProgrammingBasics.Operators', null, { timeout: 15000 });
   check('and other pages work offline, too', true);
-  await page.goto(ZH_PAGE);
-  await page.waitForSelector('#exercise-1', { timeout: 30000 });
-  check('a translated page that was read before loads offline, too', true);
+  for (const language of translations) {
+    await page.goto(`${URL_}${language.dir}/${language.prefix}.ProgrammingBasics.Booleans.html`);
+    await page.waitForSelector('#exercise-1', { timeout: 30000 });
+    check(`${language.name}: a translated page that was read before loads offline, too`, true);
+  }
   await page.goto(PAGE);
   await page.waitForSelector('#exercise-1');
   await openExercise(page);

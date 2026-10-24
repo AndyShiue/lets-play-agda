@@ -136,17 +136,16 @@
   }
 
   /**
-   * The tutorial's modules are `Padova2025.…`; the translation's are `Padova2025-zh-TW.…`, and
-   * everything that is derived from one is derived in the same language.
+   * The tutorial's modules are `Padova2025.…`; those of a translation `Padova2025-<code>.…` (the code of its
+   * language, languages.json), and everything that is derived from a module is derived in its language: the
+   * exercise modules are `Exercise.…` and `Exercise-<code>.…`. (A convention, so that no list of languages is needed here:
+   * this file is also part of the editor's extension.)
    * @returns {{ prefix: string, rest: string, exercisePrefix: string }}
    */
   function splitModuleName(moduleName) {
-    const translated = /^Padova2025-zh-TW\./.test(moduleName);
-    return {
-      prefix: translated ? 'Padova2025-zh-TW' : 'Padova2025',
-      rest: moduleName.replace(/^Padova2025(-zh-TW)?\./, ''),
-      exercisePrefix: translated ? 'Exercise-zh-TW' : 'Exercise',
-    };
+    const m = /^(Padova2025(-[\w-]+)?)\.(.*)$/.exec(moduleName);
+    const suffix = m?.[2] ?? '';
+    return { prefix: m ? m[1] : 'Padova2025', rest: m ? m[3] : moduleName, exercisePrefix: 'Exercise' + suffix };
   }
 
   /** `-- EX: <claim>` lines become checked-by-refl declarations (with the equality of the same language). */
@@ -161,10 +160,10 @@
     return exercisePrefix + '.' + rest + '.Ex' + ordinal;
   }
 
-  /** The module of the tutorial that an exercise file `/Exercise[-zh-TW]/<Chapter>/<Module>/Ex<n>.agda` is of. */
+  /** The module of the tutorial that an exercise file `/Exercise[-<code>]/<Chapter>/<Module>/Ex<n>.agda` is of. */
   function exerciseSourceModule(path) {
-    const m = /^\/Exercise(-zh-TW)?\/(.+)\/Ex(\d+)\.agda$/.exec(path);
-    return m ? { moduleName: (m[1] ? 'Padova2025-zh-TW.' : 'Padova2025.') + m[2].replace(/\//g, '.'), ordinal: Number(m[3]) } : null;
+    const m = /^\/Exercise(-[\w-]+)?\/(.+)\/Ex(\d+)\.agda$/.exec(path);
+    return m ? { moduleName: 'Padova2025' + (m[1] ?? '') + '.' + m[2].replace(/\//g, '.'), ordinal: Number(m[3]) } : null;
   }
 
   function exercisePath(moduleName, ordinal) {

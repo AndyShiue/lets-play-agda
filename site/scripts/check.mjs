@@ -5,9 +5,11 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+const languages = createRequire(import.meta.url)('./lib/languages.cjs');
 const problems = [];
 const stripCode = (html) => html.replace(/<pre[\s\S]*?<\/pre>/g, '').replace(/<code>[\s\S]*?<\/code>/g, '');
 const count = (text, re) => (text.match(re) || []).length;
@@ -21,8 +23,8 @@ const LEFTOVERS = [
   [/\]\([^)]*\)/, 'link syntax'],
 ];
 
-// the pages of the main site and of the translation (a directory of it)
-const pageDirs = [dist, path.join(dist, 'zh-TW')].filter((d) => fs.existsSync(d));
+// the pages of the main site and of its translations (a directory each)
+const pageDirs = languages.all.map((language) => path.join(dist, language.dir)).filter((d) => fs.existsSync(d));
 for (const [dir, file] of pageDirs.flatMap((d) => fs.readdirSync(d).filter((f) => f.endsWith('.html') && f !== '404.html').map((f) => [d, f]))) {
   const html = fs.readFileSync(path.join(dir, file), 'utf8');
   const article = html.slice(html.indexOf('<article'), html.indexOf('</article>'));

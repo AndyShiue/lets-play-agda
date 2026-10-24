@@ -18,66 +18,16 @@
   const app = $('#app');
   const main = $('#main');
 
-  // The words of what this script shows (the rest of the page is generated with its words, see
-  // scripts/build.mjs). A translation is a site of its own in a directory of the main one, `lang`.
-  const STRINGS = {
-    en: {
-      restored: (n) => `Restored ${n} entries.`,
-      nothingNew: 'Nothing new in that file.',
-      notBackup: 'That does not look like a backup of this site.',
-      solvedMark: '✓ Solved',
-      copy: 'Copy', copied: 'Copied', pressCtrlC: 'Press Ctrl+C',
-      showHint: '👉 Show hint…', showMore: '👉 Show more…',
-      peek: 'Do you want to peek at the reference solution?',
-      toDeclaration: 'Go to its declaration',
-      searchNone: 'No results',
-      editorFrame: 'Agda editor', editor: 'Editor', exercise: 'Exercise',
-      opening: 'Opening the exercise…',
-      starting: 'Starting the editor. The first start downloads about 30 MB; later starts use the cache.',
-      restarting: 'Restarting the editor…',
-      didNotStart: 'The editor did not start. Close it and try again, or reload the page.',
-      needsWorker: 'This browser cannot run the editor here: it needs service workers (HTTPS or localhost).',
-      preparing: 'Preparing the editor for its first start…',
-      noChannel: 'This browser does not support the editor (BroadcastChannel).',
-      editorError: 'The editor reported an error.',
-      solvedToast: '🎉 Exercise solved!',
-      newVersion: 'A new version of this site is available.', reload: 'Reload',
-      workerRemoved: 'Service worker removed. Reloading without it…',
-      typeHint: (ch, how) => `${ch}   type: ${how}`,
-      streak: (current, longest) => `Streak: ${current} ${current === 1 ? 'day' : 'days'} · longest ${longest}`,
-      day: (ms) => new Date(ms).toDateString(),
-    },
-    'zh-TW': {
-      restored: (n) => `已還原 ${n} 筆紀錄。`,
-      nothingNew: '這個檔案裡沒有新的內容。',
-      notBackup: '這看起來不是本網站的備份檔。',
-      solvedMark: '✓ 已解出',
-      copy: '複製', copied: '已複製', pressCtrlC: '請按 Ctrl+C',
-      showHint: '👉 顯示提示…', showMore: '👉 顯示更多…',
-      peek: '要偷看參考解答嗎？',
-      toDeclaration: '前往它的宣告處',
-      searchNone: '沒有結果',
-      editorFrame: 'Agda 編輯器', editor: '編輯器', exercise: '習題',
-      opening: '正在開啟習題…',
-      starting: '正在啟動編輯器。第一次啟動會下載約 30 MB；之後會使用快取。',
-      restarting: '正在重新啟動編輯器…',
-      didNotStart: '編輯器沒有啟動。請關閉後再試一次，或重新載入網頁。',
-      needsWorker: '這個瀏覽器無法在這裡執行編輯器：需要 service worker（HTTPS 或 localhost）。',
-      preparing: '正在為第一次啟動準備編輯器…',
-      noChannel: '這個瀏覽器不支援編輯器（BroadcastChannel）。',
-      editorError: '編輯器回報了錯誤。',
-      solvedToast: '🎉 習題解出了！',
-      newVersion: '本網站有新版本。', reload: '重新載入',
-      workerRemoved: '已移除 service worker。正在不帶它重新載入…',
-      typeHint: (ch, how) => `${ch}   輸入：${how}`,
-      streak: (current, longest) => `連續紀錄：${current} 天 · 最長 ${longest} 天`,
-      day: (ms) => new Date(ms).toLocaleDateString('zh-TW', { dateStyle: 'full' }),
-    },
+  // The words of what this script shows come with the page, in its language (config.words, from i18n/<code>.json;
+  // see scripts/build.mjs). {name} stands for a value; a word can have a form per plural category (Intl.PluralRules,
+  // the key is `count`), as the languages differ in what they have.
+  const plural = new Intl.PluralRules(config.htmlLang || 'en');
+  const t = (key, values = {}) => {
+    let word = config.words?.[key];
+    if (word && typeof word === 'object') word = word[plural.select(values.count ?? 0)] ?? word.other;
+    return String(word ?? key).replace(/\{(\w+)\}/g, (match, name) => (name in values ? values[name] : match));
   };
-  const t = (key, ...args) => {
-    const s = STRINGS[config.lang]?.[key] ?? STRINGS.en[key];
-    return typeof s === 'function' ? s(...args) : s;
-  };
+  const dateLabel = (ms) => new Date(ms).toLocaleDateString(config.htmlLang || undefined, { dateStyle: 'full' });
 
   const store = {
     get(key) { try { return localStorage.getItem(key); } catch { return null; } },
@@ -127,7 +77,7 @@
         }
         refreshProgress();
         $$('.exercise').forEach(renderExercise);
-        toast(n ? t('restored', n) : t('nothingNew'));
+        toast(n ? t('restored', { n }) : t('nothingNew'));
       } catch (err) {
         toast(t('notBackup'));
       }
@@ -183,6 +133,32 @@
     document.documentElement.dataset.theme = next;
     store.set('lpa:theme', next);
   });
+
+  // the language menu (only where there is a translation): a globe that opens a list of the languages
+  const langToggle = $('#lang-toggle');
+  const langList = $('#lang-list');
+  if (langToggle && langList) {
+    const setLangOpen = (open) => {
+      langList.hidden = !open;
+      langToggle.setAttribute('aria-expanded', String(open));
+    };
+    langToggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setLangOpen(langList.hidden);
+    });
+    document.addEventListener('click', (event) => {
+      if (langList.hidden) return;
+      // the language that is shown already: nothing to load, the list just closes
+      const current = event.target.closest?.('#lang-list a[aria-current="true"]');
+      if (current) event.preventDefault();
+      if (current || !event.target.closest?.('.lang-menu')) setLangOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || langList.hidden) return;
+      setLangOpen(false);
+      langToggle.focus();
+    });
+  }
 
   const closeNav = () => { app.classList.remove('nav-open'); $('#scrim').hidden = true; };
   $('.nav-toggle').addEventListener('click', () => {
@@ -272,8 +248,8 @@
   // navigation without reloading
   // ---------------------------------------------------------------------------
   const isPageLink = (a) => {
-    // (the link to the other language is a page load of its own: other styles, other index)
-    if (a.target === '_blank' || a.hasAttribute('download') || a.origin !== location.origin || a.classList.contains('lang-switch')) return false;
+    // (a link to a language is a page load of its own: other styles, other index)
+    if (a.target === '_blank' || a.hasAttribute('download') || a.origin !== location.origin || a.classList.contains('lang-link')) return false;
     const path = a.pathname;
     return (path.endsWith('.html') || path.endsWith('/')) && !path.includes('/editor/');
   };
@@ -287,6 +263,9 @@
       const next = doc.getElementById('content');
       if (!next) throw new Error('no content');
       $('#content').replaceWith(next);
+      // the links of the language menu are to this page, in each language
+      const languages = doc.getElementById('lang-list');
+      if (languages && langList) langList.replaceChildren(...languages.children);
       document.title = doc.title;
       if (push) history.pushState(null, '', url.href);
       markCurrent(next.dataset.module);
@@ -866,7 +845,7 @@
     const holder = event.target.closest?.('pre.agda, pre.code, code');
     if (!holder) return;
     const ch = symbolAt(event.clientX, event.clientY);
-    const hint = ch ? t('typeHint', ch, unicode[ch]) : '';
+    const hint = ch ? t('typeHint', { symbol: ch, keys: unicode[ch] }) : '';
     if (holder.title !== hint) holder.title = hint;
   });
 
@@ -927,8 +906,8 @@
     const lead = (new Date(shown[0].ms).getDay() + 6) % 7;
     const cells = [...Array(lead).fill(null), ...shown];
     box.hidden = false;
-    box.innerHTML = `<div class="activity-title">${t('streak', current, longest)}</div>` +
-      `<div class="activity-grid">${cells.map((c) => (c ? `<i class="daybox ${c.status}" title="${t('day', c.ms)}"></i>` : '<i></i>')).join('')}</div>`;
+    box.innerHTML = `<div class="activity-title">${t('streak', { count: current, current, longest })}</div>` +
+      `<div class="activity-grid">${cells.map((c) => (c ? `<i class="daybox ${c.status}" title="${dateLabel(c.ms)}"></i>` : '<i></i>')).join('')}</div>`;
   }
 
   // ---------------------------------------------------------------------------

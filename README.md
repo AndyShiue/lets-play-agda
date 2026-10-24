@@ -112,7 +112,7 @@ the build script marks such a build with `DEV-BUILD-DO-NOT-PUBLISH.txt`.
 | [`Padova2025/`](Padova2025) | the tutorial: literate Agda in Markdown (`*.lagda.md`), CC BY-SA |
 | [`padova2025.agda-lib`](padova2025.agda-lib) | Agda library file, for working with a local Agda; the one library file of both trees (see below) |
 | [`Padova2025-zh-TW/`](Padova2025-zh-TW) | the Traditional Chinese translation of the tutorial, same file names (see below) |
-| [`site/`](site/README.md) | the site generator, the client code (navigation, progress, the editor panel) and the end-to-end test |
+| [`site/`](site/README.md) | the site generator, the client code (navigation, progress, the editor panel), the list of the languages and their words, and the end-to-end test |
 | [`editor/`](editor/README.md) | the in-browser editor: VS Code for the Web, agda-mode, Agda as WebAssembly, and a service worker |
 | [`.github/workflows/pages.yml`](.github/workflows/pages.yml) | build and deployment |
 
@@ -171,7 +171,8 @@ The pages of the table of contents are the modules reached from
 [`Padova2025-zh-TW/`](Padova2025-zh-TW) holds the whole tutorial in Traditional Chinese (as
 written in Taiwan): the same 106 files under the same names. The site deploys it to `/zh-TW/`
 (<https://andyshiue.github.io/lets-play-agda/zh-TW/>); the pages have the same names as the
-English ones, and a button in the top bar (`EN` / `繁中`) goes to the same page in the other language.
+English ones, and a globe in the top bar opens a list of the languages (English, 繁體中文) that goes to the
+same page in the language chosen.
 
 * **What is translated, and what is not.** The prose and the *comments* in the code are
   translated, and the links are the translation's own: to its pages
@@ -206,8 +207,9 @@ English ones, and a button in the top bar (`EN` / `繁中`) goes to the same pag
   workspace root, both trees in it): the first exercise of `Booleans` and the first of `Operators`
   (which imports the translation's `Booleans`) type-check as they should. **Not tested:** the other
   exercises, and a native Agda on the files of the repository.
-* **The site.** `site/scripts/build-all.mjs` builds the English site and then the translation into
-  `dist/zh-TW/` (`build.mjs --lang zh-TW --source ../Padova2025-zh-TW --root ../`). Pages keep
+* **The site.** `site/scripts/build-all.mjs` builds the English site and then every translation (the languages are
+  listed in [`site/languages.json`](site/languages.json); [`site/README.md`](site/README.md) says how a language is
+  added) into `dist/<code>/`, here `dist/zh-TW/` (`build.mjs --lang zh-TW`). Pages keep
   the original's names and the ids of their headings are the original's too (so that links and
   bookmarks work in both languages); the editor, the service worker and the archives are
   the main site's. The words around the tutorial (buttons, messages, the exercise boxes) are

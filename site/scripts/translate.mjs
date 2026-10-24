@@ -1,31 +1,45 @@
 #!/usr/bin/env node
 /*
- * Tools for the Traditional Chinese translation of the tutorial:
- * ../Padova2025-zh-TW/ is the translation of ../Padova2025/, file for file.
+ * Tools for the translations of the tutorial: ../Padova2025-<code>/ is the translation of ../Padova2025/ into the
+ * language <code> of languages.json, file for file.
  *
- *   node scripts/translate.mjs skeleton           create the files that are missing (English text, code ready)
- *   node scripts/translate.mjs extract [files…]   print the paragraphs that are not translated yet
- *   node scripts/translate.mjs apply <file…>      put translated paragraphs (the same format) into the files
- *   node scripts/translate.mjs status             how much is translated
- *   node scripts/translate.mjs check              does the translation keep the structure of the original
+ *   node scripts/translate.mjs [--lang <code>] skeleton          create the files that are missing (original text, code ready)
+ *   node scripts/translate.mjs [--lang <code>] extract [files…]  print the paragraphs that are not translated yet
+ *   node scripts/translate.mjs [--lang <code>] apply <file…>     put translated paragraphs (the same format) into the files
+ *   node scripts/translate.mjs [--lang <code>] status            how much is translated
+ *   node scripts/translate.mjs [--lang <code>] check             does the translation keep the structure of the original
+ *
+ * (Without --lang: the translation, if there is one language besides the base.)
  *
  * A file is cut into blocks: blank lines, fenced code, HTML comments (hidden code) and
  * runs of text. Only runs of text are translated; the rest is copied as it is, except that
  * the modules of the translation are named after its folder: `module Padova2025.A.B` is
- * `module Padova2025-zh-TW.A.B` (and the imports with it). So the folder is an Agda module
+ * `module Padova2025-<code>.A.B` (and the imports with it). So the folder is an Agda module
  * tree of its own, next to the original's, and its modules cannot clash with the original's.
- * (The links between the pages keep the original's names: `Padova2025.A.B.html`.)
+ * The comments of the code are translated, too (what the build reads is not: `-- Holify`,
+ * `-- Tests`, `-- EX:`). The links between the pages are to the pages of the translation:
+ * `Padova2025-<code>.A.B.html`; one to Wikipedia may be to the article in the language.
  *
  * The format of `extract` and `apply`: a line `@@ Path/Of/File.lagda.md #<block>`, then the text.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
-const SRC = path.join(repo, 'Padova2025');
-const DST = path.join(repo, 'Padova2025-zh-TW');
+const languages = createRequire(import.meta.url)('./lib/languages.cjs');
+
+const SRC = path.join(repo, languages.base.prefix);
+// the language that is worked on: --lang, or the one translation there is
+const argv = process.argv.slice(2);
+const langAt = argv.indexOf('--lang');
+const given = langAt >= 0 ? argv.splice(langAt, 2)[1] : null;
+const language = given ? languages.byCode(given) : languages.translations.length === 1 ? languages.translations[0] : null;
+if (language?.base) throw new Error('the base language is not a translation');
+const DST = path.join(repo, language?.prefix ?? 'Padova2025-<code>');
+const PREFIX = language?.prefix ?? 'Padova2025-<code>';
 
 // ---------------------------------------------------------------------------
 // blocks
@@ -75,8 +89,15 @@ export function parse(text) {
 const unparse = (blocks) => blocks.flatMap((b) => b.lines).join('\n');
 
 /** Code is copied, with the modules of the translation named after its folder. */
-export const renameModules = (line) => line.replace(/(^|[\s(])Padova2025\.(?=[A-Z])/g, '$1Padova2025-zh-TW.');
-const codeOf = (text) => unparse(parse(text).map((b) => (b.kind === 'fence' || b.kind === 'comment' ? { ...b, lines: b.lines.map(renameModules) } : b)));
+export const renameModules = (line) => line.replace(/(^|[\s(])Padova2025\.(?=[A-Z])/g, `$1${PREFIX}.`);
+/** A link to a page (or to the archive) of the tutorial is to the same page of the translation: `](Padova2025.A.html)` → `](Padova2025-<code>.A.html)`. */
+export const localizeLinks = (line) => line.replace(/\]\(Padova2025\./g, `](${PREFIX}.`);
+/** The text of an original, ready to be translated: its code with the modules of the translation, its links to the translation's pages. */
+const codeOf = (text) => unparse(parse(text).map((b) => {
+  if (b.kind === 'fence' || b.kind === 'comment') return { ...b, lines: b.lines.map(renameModules) };
+  if (b.kind === 'text') return { ...b, lines: b.lines.map(localizeLinks) };
+  return b;
+}));
 
 /** What is left of a run of text without the things that are not translated. */
 function prose(lines) {
@@ -124,6 +145,14 @@ function skeleton() {
     created++;
   }
   console.log(`${created} files created in ${path.relative(repo, DST)}`);
+  // its words: the base language's, to be translated, and the "sample" of the pages that the end-to-end test looks for
+  const words = path.join(here, '..', 'i18n', `${language.code}.json`);
+  if (!fs.existsSync(words)) {
+    const base = JSON.parse(fs.readFileSync(path.join(here, '..', 'i18n', `${languages.base.code}.json`), 'utf8'));
+    const sample = { title: '', constantsHeading: '', codeComment: '', hintToggle: '' };
+    fs.writeFileSync(words, JSON.stringify({ ...base, sample }, null, 2) + '\n');
+    console.log(`${path.relative(repo, words)} created: its words are the base language's, to be translated, and the sample is to be filled in (see i18n/zh-TW.json)`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -221,11 +250,11 @@ function structure(lines) {
   const text = lines.join('\n');
   const take = (re, group = 0) => [...text.matchAll(re)].map((m) => m[group]).sort();
   return {
-    code: take(/(`+)[^`]+\1/g).map((m) => m.replace(/\s+/g, ' ').replace(/Padova2025-zh-TW\./g, 'Padova2025.')).sort(), // (a line break inside a span is a space; a module may be named by either prefix)
+    code: take(/(`+)[^`]+\1/g).map((m) => m.replace(/\s+/g, ' ').replace(new RegExp(PREFIX + '\\.', 'g'), 'Padova2025.')).sort(), // (a line break inside a span is a space; a module may be named by either prefix)
     math: take(/\$\$[\s\S]*?\$\$|\$[^$]+\$/g).map((m) => m.replace(/\s+/g, ' ')).sort(), // (a formula may be broken over lines)
-    // (a link to another page is to the translation's page, one to Wikipedia may be to its Chinese article)
+    // (a link to another page is to the translation's page, one to Wikipedia may be to the article in its language)
     urls: take(/\]\(([^)\s]*)[^)]*\)|\b(?:href|src)="([^"]*)"/g, 0).map((m) => m.replace(/^.*?(\]\(|href="|src=")/, '')
-      .replace(/^Padova2025-zh-TW([.-])/, 'Padova2025$1').replace(/^https:\/\/(?:en|zh)\.wikipedia\.org\/.*$/, 'wikipedia')).sort(),
+      .replace(new RegExp('^' + PREFIX + '([.-])'), 'Padova2025$1').replace(/^https:\/\/[\w-]+\.wikipedia\.org\/.*$/, 'wikipedia')).sort(),
     tags: take(/<\/?[a-zA-Z][^>]*>/g),
     fences: lines.filter((l) => /^\s*:::/.test(l)),
     headings: lines.filter((l) => /^#+\s/.test(l)).map((l) => /^#+/.exec(l)[0]),
@@ -240,7 +269,7 @@ function check() {
   for (const f of english) if (!chinese.has(f)) problems.push(`${f}: missing in the translation`);
   for (const f of chinese) if (!english.has(f)) problems.push(`${f}: no such file in the original`);
   // The library file is the one at the root of the repository, which serves both trees (their modules are named
-  // `Padova2025.…` and `Padova2025-zh-TW.…`). A file below the root, in the folder of a tree, is an error in Agda
+  // `Padova2025.…` and `Padova2025-<code>.…`). A file below the root, in the folder of a tree, is an error in Agda
   // (LibTooFarDown), and a second one at the root is one, too (several .agda-lib files in one directory).
   for (const dir of [SRC, DST]) {
     (function look(d) {
@@ -278,12 +307,15 @@ function check() {
 }
 
 // ---------------------------------------------------------------------------
-const [command, ...rest] = process.argv.slice(2);
+const [command, ...rest] = argv; // (what is left of the arguments, without --lang)
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  if (command === 'skeleton') skeleton();
+  if (!language && ['skeleton', 'extract', 'apply', 'status', 'check'].includes(command)) {
+    console.error(`which language? --lang <code>: one of ${languages.translations.map((l) => l.code).join(', ') || '(none in languages.json)'}`);
+    process.exitCode = 2;
+  } else if (command === 'skeleton') skeleton();
   else if (command === 'extract') extract(rest.filter((a) => !a.startsWith('--')), rest.includes('--all'));
   else if (command === 'apply') apply(rest);
   else if (command === 'status') status(rest.includes('-v'));
   else if (command === 'check') check();
-  else { console.error('usage: translate.mjs skeleton | extract [files…] [--all] | apply <file…> | status [-v] | check'); process.exitCode = 2; }
+  else { console.error('usage: translate.mjs [--lang <code>] skeleton | extract [files…] [--all] | apply <file…> | status [-v] | check'); process.exitCode = 2; }
 }

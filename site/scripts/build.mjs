@@ -2,8 +2,10 @@
 /*
  * Generates the tutorial site from ../Padova2025/**.lagda.md into dist/.
  *
- *   node scripts/build.mjs [--out dist] [--build-id <id>] [--editor-dist <dir>] [--strict]
+ *   node scripts/build.mjs [--lang <code>] [--out dist] [--build-id <id>] [--editor-dist <dir>] [--strict]
  *
+ * --lang         a language of languages.json: the site of its translation (../Padova2025-<code>), a site of
+ *                its own in a directory of the main one (--out dist/<code>); default: the base language
  * --editor-dist  a built editor (../editor) to publish under dist/editor/
  * --strict       fail on broken internal links
  */
@@ -18,6 +20,7 @@ import { createZip } from './lib/zip.mjs';
 
 const require = createRequire(import.meta.url);
 const ex = require('./lib/exercises.cjs');
+const languages = require('./lib/languages.cjs');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -30,16 +33,16 @@ const option = (name, fallback) => {
 };
 const out = path.resolve(process.cwd(), option('out', path.join(root, 'dist')));
 const editorDist = option('editor-dist');
-// A translation (zh-TW) is a site of its own in a directory of the main one: the same pages under the
-// same names, the editor and the service worker of the main site (--root: from a page to its root).
-const lang = option('lang', 'en');
-const originalDir = path.join(repo, 'Padova2025');
-const sourceDir = path.resolve(process.cwd(), option('source', originalDir));
-const siteRoot = option('root', './');
-const standalone = siteRoot === './';
+// A translation is a site of its own in a directory of the main one (languages.json says which languages there
+// are): the same pages with the names of its modules, the editor and the service worker of the main site.
+const language = languages.byCode(option('lang', languages.base.code));
+const lang = language.code;
+const available = languages.present(repo); // (the languages of the menu)
+const originalDir = path.join(repo, languages.base.prefix);
+const sourceDir = path.resolve(process.cwd(), option('source', path.join(repo, language.prefix)));
+const siteRoot = language.base ? './' : '../'; // from a page to the root of the site
+const standalone = language.base;
 const withEditor = !!editorDist || argv.includes('--with-editor');
-const alternate = option('alternate'); // where the same page is in the other language, from a page, and what to call it
-const alternateLabel = option('alternate-label', '');
 // agda-mode's data about the Unicode input method (for the hover hints), if available
 const agdaModeDir = path.resolve(process.cwd(), option('agda-mode', path.join(repo, 'editor', '.cache', 'ext', 'agda-mode')));
 const strict = argv.includes('--strict');
@@ -49,35 +52,24 @@ const REPO_URL = 'https://github.com/AndyShiue/lets-play-agda';
 const UPSTREAM_URL = 'https://github.com/iblech/lets-play-agda';
 // The pages are named after the modules, and a translation's modules have a prefix of their own
 // (`Padova2025-zh-TW.ProgrammingBasics.Booleans`), so its pages, links and exercises are its own.
-const PREFIX = lang === 'zh-TW' ? 'Padova2025-zh-TW' : 'Padova2025';
-const OTHER_PREFIX = lang === 'zh-TW' ? 'Padova2025' : 'Padova2025-zh-TW';
+const PREFIX = language.prefix;
 const SKIP_IN_TOC = new Set([`${PREFIX}.ProvingBasics.Equality.Reasoning.Core`, 'Agda.Primitive']);
 
-// The words of the page around the tutorial (the tutorial's own text is in the source files).
-// The script (src/app.js) has its own, for what it shows.
-const UI = lang === 'zh-TW' ? {
-  exercise: '習題', editHole: '✏️ Edit hole…', editHoleTitle: '開啟編輯器，編輯這個習題的 hole',
-  uses: '參考解答用到：', hintTitle: '點一下顯示；再點一下前往它的宣告處',
-  yourSolution: '你的解答', referenceSolution: '參考解答',
-  prev: '上一頁', next: '下一頁', pager: '上一頁與下一頁',
-  navToggle: '顯示或隱藏目錄', searchPlaceholder: '搜尋…', searchLabel: '搜尋教學', themeToggle: '切換深色模式',
-  editorToggle: '顯示或隱藏編輯器', toc: '目錄', backup: '下載備份', restore: '還原',
-  editor: '編輯器', resize: '拖曳以調整大小',
-  commandsTitle: '把 Agda 指令做成按鈕（載入、case split、give 等）', commands: 'Agda 指令',
-  symbolsTitle: '符號列：輸入反斜線與幾個字母，再點選符號', symbols: '符號列', symbolsGroup: '符號',
-  restart: '重新啟動編輯器', close: '關閉編輯器', wip: '施工中', anchor: '連結到這一節',
-} : {
-  exercise: 'Exercise', editHole: '✏️ Edit hole…', editHoleTitle: '',
-  uses: 'The reference solution uses:', hintTitle: 'Click to show; click again to go to its declaration',
-  yourSolution: 'Your solution', referenceSolution: 'Reference solution',
-  prev: 'Previous', next: 'Next', pager: 'Previous and next page',
-  navToggle: 'Show or hide the table of contents', searchPlaceholder: 'Search…', searchLabel: 'Search the tutorial', themeToggle: 'Toggle dark mode',
-  editorToggle: 'Show or hide the editor', toc: 'Table of contents', backup: 'Download backup', restore: 'Restore',
-  editor: 'Editor', resize: 'Drag to resize',
-  commandsTitle: 'Agda commands as buttons (load, case split, give, …)', commands: 'Agda commands',
-  symbolsTitle: 'Symbol bar: type a backslash and a few letters, then tap the symbol', symbols: 'Symbol bar', symbolsGroup: 'Symbols',
-  restart: 'Restart the editor', close: 'Close the editor', wip: 'Under construction', anchor: 'Link to this section',
-};
+// The words of the page around the tutorial (the tutorial's own text is in the source files): i18n/<code>.json, the
+// base language's where a language lacks one. "ui" is for this generator, "script" for src/app.js (it gets them in the
+// page's config); "sample" is for the end-to-end test.
+const readWords = (code) => JSON.parse(fs.readFileSync(path.join(root, 'i18n', code + '.json'), 'utf8'));
+const baseWords = readWords(languages.base.code);
+const ownWords = language.base ? baseWords : readWords(lang);
+for (const part of ['ui', 'script']) {
+  const missing = Object.keys(baseWords[part]).filter((key) => !(key in (ownWords[part] ?? {})));
+  const unknown = Object.keys(ownWords[part] ?? {}).filter((key) => !(key in baseWords[part]));
+  if (missing.length) console.warn(`warning: i18n/${lang}.json lacks ${part} words (the base language's are used): ${missing.join(', ')}`);
+  if (unknown.length) console.warn(`warning: i18n/${lang}.json has ${part} words that nothing uses: ${unknown.join(', ')}`);
+}
+const UI = { ...baseWords.ui, ...ownWords.ui };
+const SCRIPT_WORDS = { ...baseWords.script, ...ownWords.script };
+const fill = (template, values) => template.replace(/\{(\w+)\}/g, (match, name) => (name in values ? values[name] : match));
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escAttr = (s) => esc(s).replace(/"/g, '&quot;');
@@ -170,7 +162,7 @@ const tree = buildTree(`${PREFIX}.Index`, 0);
 const inToc = new Set(seenInToc);
 const orphans = [...modules.keys()].filter((m) => !inToc.has(m));
 
-const hrefOf = (name) => (/^Padova2025(-zh-TW)?\.Welcome$/.test(name) ? 'index.html' : `${name}.html`);
+const hrefOf = (name) => (/^Padova2025(-[\w-]+)?\.Welcome$/.test(name) ? 'index.html' : `${name}.html`);
 
 // ---------------------------------------------------------------------------
 // 3. pages
@@ -184,7 +176,7 @@ function rewriteUrl(from) {
     let m;
     if (/^(https?:|mailto:)/.test(url)) return { href: url, external: true };
     if (/^(javascript:|#)/.test(url)) return { href: url };
-    if ((m = /^(Padova2025(?:-zh-TW)?\.[\w.']+)\.html(#.*)?$/.exec(url))) {
+    if ((m = /^(Padova2025(?:-[\w-]+)?\.[\w.']+)\.html(#.*)?$/.exec(url))) {
       links.push({ from, to: m[1], frag: m[2] ?? '' });
       return { href: hrefOf(m[1]) + (m[2] ?? '') };
     }
@@ -319,6 +311,25 @@ function emitAsset(file, transform = (s) => s) {
   fs.writeFileSync(path.join(out, name), content);
 }
 
+/**
+ * The language menu of the top bar: a globe, and under it the languages (those of languages.json that are there, in
+ * its order), each a link to the same page in that language; the current one is marked. With one language, none.
+ */
+function languageMenu(mod) {
+  if (available.length < 2) return '';
+  const rest = mod.name.slice(PREFIX.length); // the module without the prefix of its language
+  // (from a page of this language: up to the root of the site if this is a translation, down to the other's directory)
+  const href = (other) => (other === language ? '' : (language.base ? '' : '../') + (other.base ? '' : other.dir + '/')) + hrefOf(other.prefix + rest);
+  const item = (other) => `<li><a class="lang-link" href="${escAttr(href(other))}" hreflang="${other.htmlLang}" lang="${other.htmlLang}"${other === language ? ' aria-current="true"' : ''}>${esc(other.name)}</a></li>`;
+  return `<div class="lang-menu">
+<button type="button" class="icon-btn" id="lang-toggle" aria-label="${UI.language}" title="${UI.language}" aria-haspopup="true" aria-expanded="false" aria-controls="lang-list"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></button>
+<ul class="lang-list" id="lang-list" hidden>
+${available.map(item).join('\n')}
+</ul>
+</div>
+`;
+}
+
 function layout(mod) {
   const page = pages.get(mod.name);
   const title = mod.info.title ?? { nav: mod.name, heading: mod.name };
@@ -331,20 +342,12 @@ ${prev ? `<a class="prev" href="${hrefOf(prev)}" rel="prev"><span>${UI.prev}</sp
 ${next ? `<a class="next" href="${hrefOf(next)}" rel="next"><span>${UI.next}</span>${esc(label(next))}</a>` : '<span></span>'}
 </nav>`;
   const source = `${REPO_URL}/blob/main/${mod.rel}`;
-  const footer = lang === 'zh-TW'
-    ? `<footer class="page-footer">
-<p><a href="${escAttr(source)}" target="_blank" rel="noopener">在 GitHub 上編輯這一頁</a> ·
-內容：<a href="${UPSTREAM_URL}" target="_blank" rel="noopener">${SITE_NAME}</a>，作者 Ingo Blechschmidt，繁體中文翻譯，
-<a href="https://creativecommons.org/licenses/by-sa/4.0/deed.zh-hant" target="_blank" rel="noopener">CC BY-SA</a>。</p>
-</footer>`
-    : `<footer class="page-footer">
-<p><a href="${escAttr(source)}" target="_blank" rel="noopener">Edit this page on GitHub</a> ·
-Content: <a href="${UPSTREAM_URL}" target="_blank" rel="noopener">${SITE_NAME}</a> by Ingo Blechschmidt,
-<a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA</a>.</p>
+  const footer = `<footer class="page-footer">
+${fill(UI.footer, { sourceUrl: escAttr(source), upstreamUrl: UPSTREAM_URL, siteName: esc(SITE_NAME), licenseUrl: escAttr(UI.licenseUrl) })}
 </footer>`;
 
   return `<!DOCTYPE html>
-<html lang="${lang === 'zh-TW' ? 'zh-Hant-TW' : 'en'}" data-theme="auto">
+<html lang="${language.htmlLang}" data-theme="auto" style="--todo-label: ${escAttr(JSON.stringify(UI.todo))}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
@@ -361,7 +364,7 @@ Content: <a href="${UPSTREAM_URL}" target="_blank" rel="noopener">${SITE_NAME}</
 <button type="button" class="icon-btn nav-toggle" aria-label="${UI.navToggle}" aria-controls="toc-panel">☰</button>
 <a class="brand" href="index.html"><span class="brand-logo">🐔</span><span class="brand-name">${SITE_NAME}</span></a>
 <div class="search"><input type="search" id="search" placeholder="${UI.searchPlaceholder}" aria-label="${UI.searchLabel}" autocomplete="off"><div id="search-results" hidden></div></div>
-${alternate ? `<a class="icon-btn lang-switch" href="${escAttr(alternate + hrefOf(OTHER_PREFIX + mod.name.slice(PREFIX.length)))}" hreflang="${lang === 'zh-TW' ? 'en' : 'zh-Hant-TW'}" lang="${lang === 'zh-TW' ? 'en' : 'zh-Hant-TW'}" title="${lang === 'zh-TW' ? 'This page in English' : '這一頁的繁體中文版'}">${esc(alternateLabel)}</a>\n` : ''}<button type="button" class="icon-btn" id="theme-toggle" aria-label="${UI.themeToggle}" title="${UI.themeToggle}">◐</button>
+${languageMenu(mod)}<button type="button" class="icon-btn" id="theme-toggle" aria-label="${UI.themeToggle}" title="${UI.themeToggle}">◐</button>
 <button type="button" class="icon-btn" id="editor-toggle" aria-label="${UI.editorToggle}" title="${UI.editorToggle}" aria-pressed="false">⌨</button>
 </header>
 <nav class="sidebar" id="toc-panel" aria-label="${UI.toc}">
@@ -389,7 +392,7 @@ ${footer}
 </aside>
 <div class="scrim" id="scrim" hidden></div>
 </div>
-<script type="application/json" id="lpa-config">${JSON.stringify({ buildId: BUILD_ID, searchUrl: assets['search'], unicodeUrl: assets['unicode'] ?? null, editor: withEditor, root: siteRoot, lang })}</script>
+<script type="application/json" id="lpa-config">${JSON.stringify({ buildId: BUILD_ID, searchUrl: assets['search'], unicodeUrl: assets['unicode'] ?? null, editor: withEditor, root: siteRoot, lang, htmlLang: language.htmlLang, words: SCRIPT_WORDS })}</script>
 </body>
 </html>
 `;

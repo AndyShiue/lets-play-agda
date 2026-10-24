@@ -80,8 +80,18 @@ button { font: inherit; color: inherit; }
   border-radius: .5rem; background: transparent; cursor: pointer; color: var(--muted); font-size: 1.1rem;
 }
 .icon-btn:hover { background: var(--bg-soft); color: var(--fg); }
-.lang-switch { display: inline-grid; place-items: center; width: auto; padding: 0 .55rem; font: 600 .82rem/1 var(--font); text-decoration: none; }
-.lang-switch:hover { text-decoration: none; }
+/* the language menu: a globe, and under it a list of the languages */
+.lang-menu { position: relative; }
+.lang-list {
+  position: absolute; right: 0; top: calc(100% + .35rem); z-index: 40; min-width: 9.5rem; margin: 0; padding: .3rem; list-style: none;
+  background: var(--bg); border: 1px solid var(--line); border-radius: .6rem; box-shadow: 0 8px 24px rgb(0 0 0 / .18);
+}
+.lang-list[hidden] { display: none; }
+.lang-list a { display: flex; align-items: baseline; padding: .4rem .7rem .4rem .4rem; border-radius: .4rem; color: var(--fg); text-decoration: none; white-space: nowrap; }
+.lang-list a:hover, .lang-list a:focus-visible { background: var(--bg-soft); text-decoration: none; }
+.lang-list a::before { content: ""; flex: none; width: 1.3rem; text-align: center; color: var(--accent); }
+.lang-list a[aria-current="true"] { font-weight: 600; }
+.lang-list a[aria-current="true"]::before { content: "✓"; }
 .icon-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .nav-toggle { display: none; }
 
@@ -192,13 +202,12 @@ details.solution > summary { cursor: pointer; padding: .2rem 0; }
 .Hint { background: color-mix(in srgb, var(--accent) 8%, var(--bg)); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
 .More { border-style: dashed; }
 .Todo { border-color: var(--danger); color: var(--danger); }
-.Todo::before { content: "Todo"; display: block; font-weight: 700; margin-top: .6rem; }
+.Todo::before { content: var(--todo-label, "Todo"); display: block; font-weight: 700; margin-top: .6rem; } /* (the label is set on the page, in its language) */
 
-/* Traditional Chinese (the translation's pages): its fonts after the Latin ones; an emphasis in
-   italics does not read well in Chinese, so it is bold; and the label the style adds */
+/* What is particular to the writing of a language is by its :lang(), here Traditional Chinese: its fonts after the
+   Latin ones, and an emphasis in italics does not read well in Chinese, so it is bold. (The words are in i18n/.) */
 :root:lang(zh-Hant) { --font: "Inter", "Segoe UI", system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif; }
 :lang(zh-Hant) #content em { font-style: normal; font-weight: 700; }
-:lang(zh-Hant) .Todo::before { content: "待辦"; }
 .collapse-toggle { display: inline-block; margin: .4rem 0; padding: .25rem .8rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--bg); cursor: pointer; font-size: .9rem; }
 .collapse-toggle:hover { border-color: var(--accent); }
 

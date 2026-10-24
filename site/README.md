@@ -15,9 +15,11 @@ see the [top-level README](../README.md) for credits and licenses.
 scripts/build-all.mjs   editor + site, with one build id
 scripts/build.mjs       the site generator
 scripts/lib/            Markdown renderer, Agda highlighter, exercise conventions
-scripts/check.mjs       lint of the generated pages (the English ones and the translation's)
-scripts/translate.mjs   the translation's tool: skeleton, extract, apply, status, check
+scripts/check.mjs       lint of the generated pages (of every language)
+scripts/translate.mjs   the tool for a translation: skeleton, extract, apply, status, check
 scripts/e2e.mjs         end-to-end test in a real browser
+languages.json          the languages of the site (see "Languages" below)
+i18n/<code>.json        the words of the pages and of the script, per language
 src/app.css, app.js     the site's styles and client code
 ../editor/              the editor (VS Code for the Web + Agda WASM), see its README
 ```
@@ -135,36 +137,56 @@ run yet.
   The end-to-end test simulates a deployment and checks all of this.
 * **If the service worker ever misbehaves:** open any page with `?nosw` to remove
   it and its caches.
-* **The translation** (`../Padova2025-zh-TW`, Traditional Chinese; see the top-level README) is a
-  site of its own in a directory of this one, `dist/zh-TW/`. `build-all.mjs` builds the main
-  site (with `--alternate zh-TW/ --alternate-label 繁中`, which puts the language button in the
-  top bar) and then `build.mjs --lang zh-TW --source ../Padova2025-zh-TW --out dist/zh-TW --root ../
-  --with-editor --alternate ../ --alternate-label EN`. What differs from a standalone build:
-  * The translation's modules have a prefix of their own, and so do its pages, links and
-    exercises: `Padova2025-zh-TW.<Module>.html` (`PREFIX` in `build.mjs`; the name comes from the
-    file's place in the source directory, and the build warns if the file declares another),
-    `data-module="Padova2025-zh-TW.…"` (so the progress of the two languages is kept apart),
-    and the exercise files of the editor are `Exercise-zh-TW/<Chapter>/<Module>/Ex<n>.agda`,
-    of the translation's modules, with its own `Padova2025-zh-TW.ProvingBasics.Equality.Base`
-    in the checks of `-- EX:` lines (`exercises.cjs`: `splitModuleName`). The editor's
-    workspace holds both trees (`editor/scripts/build-site.mjs`). The button in the top bar
-    goes to the page of the same module in the other language.
-  * The ids of the headings are the original's (`originalHeadingIds`: the build renders the
-    original page's headings to get them), otherwise a link such as
-    `Conjunction.html#exercise-de-morgans-laws` would not find its heading once the heading is Chinese.
-    The numbers of headings agree because `translate.mjs check` says so.
-  * Not emitted: the editor, `sw.js`, `404.html`: they are the main site's (the page's
-    `config.root` is `../`, so that the editor is `../editor/` and the worker `../sw.js` with
-    scope `../`). The archives are the translation's own: `Padova2025-zh-TW.zip` and
-    `Padova2025-zh-TW-solutions.zip`.
-  * The words around the tutorial: `UI` in `build.mjs` (what the page generator writes: the
-    exercise boxes, the top bar, the pager) and `STRINGS` in `src/app.js` (what the script
-    shows: messages, the copy button, the hint toggles; chosen by `config.lang`). The editor's
-    own messages (agda-mode, the command bar's names) stay English.
-  * The table of Unicode symbols and its hover hints are made from the original's characters
-    (the punctuation of Chinese would otherwise end up in them).
-  The end-to-end test reads a translated page, follows the language buttons, opens an exercise
-  from a translated page (the editor is the main site's) and reads one offline.
+* **Languages.** [`languages.json`](languages.json) lists them, in the order of the language menu; one is the
+  base (the tutorial's own files, `Padova2025/`, English), every other is a translation. A translation is a site
+  of its own in a directory of the main one, `dist/<code>/`, and everything about it follows from its code:
+
+  | | the base (`en`) | a translation (`zh-TW`, say) |
+  |---|---|---|
+  | its files | `Padova2025/` | `Padova2025-zh-TW/` |
+  | its modules | `Padova2025.…` | `Padova2025-zh-TW.…` |
+  | its pages | `Padova2025.<Module>.html` | `zh-TW/Padova2025-zh-TW.<Module>.html` |
+  | its exercises in the editor | `Exercise/<Chapter>/<Module>/Ex<n>.agda` | `Exercise-zh-TW/…` |
+  | its archives | `Padova2025.zip`, `…-solutions.zip` | `zh-TW/Padova2025-zh-TW.zip`, … |
+
+  `lib/languages.cjs` reads the registry and derives these names (the exercise code does not need it: it
+  follows the same convention, `splitModuleName` in `exercises.cjs`, because the editor's extension has a copy of
+  that file but no list of languages). `build-all.mjs` builds the base and then every translation whose folder is in
+  the repository (`build.mjs --lang <code>`); the language menu lists the languages that are there.
+
+  **Adding a language** (`ja`, say): put an entry in `languages.json` (`code`, `name` as the menu shows it,
+  `htmlLang`); run `node scripts/translate.mjs --lang ja skeleton`, which creates `Padova2025-ja/` (the original's
+  text and code, the modules with the new prefix, the links to the new pages) and `i18n/ja.json` (the base language's
+  words); translate the files (`status`, `extract`, `apply`, `check`, as for any translation) and the words (a word
+  that is missing is the base language's, the build says so; a plural word has a form per category of
+  `Intl.PluralRules`, with `other`); fill in the `sample` of `i18n/ja.json` (the words of the pages that the
+  end-to-end test looks for: see `i18n/zh-TW.json`; `npm test` complains until it is); add the rules to
+  `src/app.css` that the writing of the language needs, under `:lang(…)` (fonts, emphasis). Then `npm run build` and
+  `npm run e2e` handle it like the others. Tested: the build, the menu, the links and the lint with the skeleton of
+  a third language (made and removed again); not tested: a translated third language, and the end-to-end test with
+  three languages. So far there is one translation.
+* **A translation's pages** differ from the base's in a few ways:
+  * Pages, links and exercises have the translation's own names (see the table): `PREFIX` in `build.mjs`; the name
+    comes from the file's place in the source directory, and the build warns if the file declares another module.
+    `data-module` is the translation's module, so the progress of the languages is kept apart. The checks of
+    `-- EX:` lines use the equality of the same language (`exercises.cjs`). The editor's workspace holds all the
+    trees (`editor/scripts/build-site.mjs`).
+  * The language menu in the top bar (a globe; the list opens when it is pressed) lists the languages that are
+    there, each a link to the page of the same module in that language (`languageMenu` in `build.mjs`, a few lines
+    in `app.js`); the script renews the links when a page is loaded without reloading.
+  * The ids of the headings are the original's (`originalHeadingIds`: the build renders the original page's headings
+    to get them), otherwise a link such as `Conjunction.html#exercise-de-morgans-laws` would not find its heading
+    once the heading is in another language. The numbers of headings agree because `translate.mjs check` says so.
+  * Not emitted: the editor, `sw.js`, `404.html`: they are the main site's (the page's `config.root` is `../`, so
+    that the editor is `../editor/` and the worker `../sw.js` with scope `../`). The archives are the translation's own.
+  * The words around the tutorial are `i18n/<code>.json`: `ui` for what the generator writes (the exercise boxes, the
+    top bar, the pager, the footer, the label of Todo), `script` for what `app.js` shows (messages, the copy button,
+    the hint toggles; they come with the page, in its `config.words`). The editor's own messages (agda-mode, the
+    command bar's names) stay English.
+  * The table of Unicode symbols and its hover hints are made from the original's characters (the punctuation of
+    another language would otherwise end up in them).
+  The end-to-end test reads the pages of every translation, uses the language menu, opens exercises from them (the
+  editor is the main site's) and reads one offline.
 
 ## Known gaps
 

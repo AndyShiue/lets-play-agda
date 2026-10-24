@@ -169,11 +169,12 @@ for (const name of fs.readdirSync(ext)) {
 
 console.log('• workspace');
 const ws = path.join(out, 'workspace');
-copy(path.join(repoRoot, 'Padova2025'), path.join(ws, 'Padova2025'), (r) => !r.endsWith('.agdai'));
-// the translation: its modules are `Padova2025-zh-TW.…`; the library file at the root serves both trees
-// (a library file inside either folder would be an error in Agda: LibTooFarDown)
-if (fs.existsSync(path.join(repoRoot, 'Padova2025-zh-TW'))) {
-  copy(path.join(repoRoot, 'Padova2025-zh-TW'), path.join(ws, 'Padova2025-zh-TW'), (r) => !r.endsWith('.agdai'));
+// the tutorial and its translations (site/languages.json: the folders that are there): the modules of a translation are
+// `Padova2025-<code>.…`; the library file at the root serves all of them (a library file inside one of the folders would
+// be an error in Agda: LibTooFarDown)
+const languages = createRequire(import.meta.url)(path.join(repoRoot, 'site', 'scripts', 'lib', 'languages.cjs')).present(repoRoot);
+for (const language of languages) {
+  copy(path.join(repoRoot, language.prefix), path.join(ws, language.prefix), (r) => !r.endsWith('.agdai'));
 }
 fs.copyFileSync(path.join(repoRoot, 'padova2025.agda-lib'), path.join(ws, 'padova2025.agda-lib'));
 copy(inputs.cubical, path.join(ws, 'cubical'), (r) =>
@@ -187,7 +188,7 @@ fs.writeFileSync(path.join(out, 'workspace-settings.json'), JSON.stringify({
   'alsWasmLoader.libraryFilePaths': ['cubical/cubical.agda-lib'],
   // The tutorial's own modules and the library are needed by Agda, but are not
   // for browsing (they contain the solutions); exercises live in Exercise/.
-  'files.exclude': { Padova2025: true, 'Padova2025-zh-TW': true, cubical: true, '.vscode': true, 'padova2025.agda-lib': true },
+  'files.exclude': { ...Object.fromEntries(languages.map((language) => [language.prefix, true])), cubical: true, '.vscode': true, 'padova2025.agda-lib': true },
   'files.autoSave': 'afterDelay',
   'files.autoSaveDelay': 800,
 }, null, 2) + '\n');
