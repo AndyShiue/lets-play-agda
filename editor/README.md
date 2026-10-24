@@ -95,6 +95,13 @@ modules import. The reader's code (the part between the markers) is kept in
 IndexedDB and put back when the exercise is opened again; the rest of the file is
 regenerated, so updates of the tutorial text reach readers who have started.
 
+An exercise is worked on alone: when the page asks for one, the editor shows its file and
+closes the files that are open for other exercises (also those that VS Code restored from the
+previous visit). Closing a tab only closes the view: the file stays in the file system and what
+the reader typed in IndexedDB, so the exercise comes back as it was left, also after the editor
+itself was closed and opened again. Only text files of the `lpa` file system are closed; the
+Agda panel and anything else stay. (Edits are saved before closing, so VS Code does not ask.)
+
 ## Commands
 
 ```sh

@@ -625,6 +625,37 @@ try {
     withImports.slice(0, 300));
   await page.screenshot({ path: path.join(OUT, '4c-translation.png') });
 
+  // ---- 4d. one exercise at a time ----------------------------------------------------------------
+  log('--- 4d. opening an exercise closes the files of the exercises before it');
+  // the files open in the editor, asked of its extension (a tab strip may show only the active tab)
+  const openFiles = () => page.evaluate(() => new Promise((resolve) => {
+    const asker = new BroadcastChannel('lpa-editor');
+    const timer = setTimeout(() => { asker.close(); resolve(null); }, 5000);
+    asker.onmessage = ({ data }) => { if (data?.t === 'tabs-are') { clearTimeout(timer); asker.close(); resolve(data.paths); } };
+    asker.postMessage({ t: 'tabs' });
+  }));
+  const OPERATORS_FILE = '/Exercise-zh-TW/ProgrammingBasics/Operators/Ex1.agda';
+  const onlyFile = (path_) => async () => JSON.stringify(await openFiles()) === JSON.stringify([path_]);
+  // (the English Booleans exercise and the translation's were opened before; they are closed, not gone)
+  const closedOthers = await waitFor('the files of the earlier exercises to be closed', onlyFile(OPERATORS_FILE), 30).then(() => true, () => false);
+  check('opening an exercise closes the files opened for the exercises before it: its own is the only one open', closedOthers, JSON.stringify(await openFiles()));
+  // closing and reopening the editor: the file is still there
+  await page.click('[data-action="editor-close"]');
+  check('the editor is closed', (await page.locator('#app.editor-open').count()) === 0);
+  await page.click('#editor-toggle');
+  await waitFor('the editor to come back', async () => (await page.locator('#app.editor-open').count()) === 1 && editorFrame(page), 30);
+  const stillThere = await waitFor('the exercise file after closing and reopening the editor',
+    async () => (await editorFrame(page).locator(`.monaco-editor[data-uri*="${OPERATORS_FILE}"]`).count()) > 0 && (await onlyFile(OPERATORS_FILE)()), 60).then(() => true, () => false);
+  check('after closing and reopening the editor the file of the exercise is still open', stillThere, JSON.stringify(await openFiles()));
+  // an exercise that was left comes back as it was left: the English one, with the solution the reader had written
+  await page.goto(PAGE);
+  await page.waitForSelector('#exercise-1');
+  await openExercise(page);
+  await waitFor('the English exercise file', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="/Exercise/ProgrammingBasics/Booleans/Ex1.agda"]').count()) > 0, 120);
+  const backAgain = await waitFor('only the exercise file', onlyFile('/Exercise/ProgrammingBasics/Booleans/Ex1.agda'), 30).then(() => true, () => false);
+  check('going back to the first exercise: the other file is closed, and the code the reader wrote is as it was left',
+    backAgain && (await editorText(page)).includes('idBool x = x'), JSON.stringify(await openFiles()));
+
   // ---- 5. offline ---------------------------------------------------------
   log('--- 5. server stopped');
   await page.close();

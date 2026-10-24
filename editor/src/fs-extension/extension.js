@@ -410,10 +410,27 @@ function activate(context) {
     }
   }
 
+  /**
+   * An exercise is worked on alone: the files that were open for the exercises before it are closed
+   * (those of the tutorial's exercises, and what VS Code restored from the previous visit). Closing a
+   * tab only closes the view: the file stays in the file system (and what the reader typed in
+   * IndexedDB), so opening that exercise again shows it as it was left.
+   */
+  async function closeOtherFiles(keepPath) {
+    // saved first: a file with edits would ask what to do with them, and the closing would wait for the answer
+    await vscode.commands.executeCommand('workbench.action.files.saveAll');
+    const others = vscode.window.tabGroups.all.flatMap((group) => group.tabs)
+      .filter((tab) => tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === 'lpa' && tab.input.uri.path !== keepPath);
+    if (others.length) await vscode.window.tabGroups.close(others, true);
+  }
+
   async function openExercise(moduleName, ordinal) {
     const key = `${moduleName}/${ordinal}`;
     if (current?.key === key || opening === key) {
-      if (current?.key === key) channel.postMessage({ t: 'opened', module: moduleName, ordinal, path: current.path });
+      if (current?.key === key) {
+        await closeOtherFiles(current.path).catch(() => {}); // (the reader may have opened others since)
+        channel.postMessage({ t: 'opened', module: moduleName, ordinal, path: current.path });
+      }
       return;
     }
     opening = key;
@@ -424,6 +441,8 @@ function activate(context) {
 
       const uri = vscode.Uri.from({ scheme: 'lpa', path });
       const editor = await vscode.window.showTextDocument(uri, { preview: false });
+      // (after the exercise is shown: a group without a tab would be closed with its last one)
+      await closeOtherFiles(path).catch(() => {});
       await foldAroundExercise(editor);
       // show the exercise (between the markers), wherever the reader has scrolled to
       const text = editor.document.getText();
@@ -560,6 +579,12 @@ function activate(context) {
       else if (data?.t === 'im-insert') await placeText(String(data.text), false);
       else if (data?.t === 'cmd-sync') channel.postMessage({ t: 'cmds', items: (await loadAgdaCommands()).map(({ key, label, hint }) => ({ key, label, hint })) });
       else if (data?.t === 'agda') await runAgdaCommand(String(data.key));
+      // which files are open (read-only; the end-to-end test asks, a tab strip may show only the active one)
+      else if (data?.t === 'tabs') {
+        const paths = vscode.window.tabGroups.all.flatMap((group) => group.tabs)
+          .map((tab) => (tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === 'lpa' ? tab.input.uri.path : null)).filter(Boolean);
+        channel.postMessage({ t: 'tabs-are', paths });
+      }
     } catch (err) {
       channel.postMessage({ t: 'error', message: String(err && err.message || err) });
     }
