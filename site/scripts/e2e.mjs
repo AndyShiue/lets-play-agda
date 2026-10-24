@@ -656,6 +656,17 @@ try {
   check('going back to the first exercise: the other file is closed, and the code the reader wrote is as it was left',
     backAgain && (await editorText(page)).includes('idBool x = x'), JSON.stringify(await openFiles()));
 
+  // An exercise file stops after the exercise. A fixity declaration of an operator that is defined further down
+  // (`infixl 1 _>>=_ _⟫=_`) would be a warning of Agda, and a solved exercise with a warning is not "All Done".
+  const beforeFixity = await agdaPanel(page);
+  await page.click('a[data-module="Padova2025.ComputationalContent.DoubleNegation"]');
+  await page.waitForFunction(() => document.querySelector('#content')?.dataset.module === 'Padova2025.ComputationalContent.DoubleNegation');
+  await page.click('#exercise-5 [data-action="edit"]');
+  await waitFor('the file of exercise 5 of DoubleNegation', async () => (await editorFrame(page).locator('.monaco-editor[data-uri*="/Exercise/ComputationalContent/DoubleNegation/Ex5.agda"]').count()) > 0, 120);
+  const fixity = await waitAgdaChange(page, beforeFixity, /All Goals|All Done|Warning|Error/, 240);
+  check('an exercise whose fixity declaration names an operator that is defined after it has no warning',
+    /All Goals/.test(fixity) && !/Warning|UnknownNames/.test(fixity), fixity.slice(0, 240));
+
   // ---- 5. offline ---------------------------------------------------------
   log('--- 5. server stopped');
   await page.close();
