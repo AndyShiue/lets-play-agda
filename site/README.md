@@ -120,6 +120,15 @@ run yet.
   does nothing of the kind, and a keyboard that is up stays up. The prompts of the Agda panel
   (*Evaluate* outside a hole, *Infer type*) are left alone: they need the keyboard. The symbol
   bar is not part of this: a finger on it lets go first, and it acts as it always did.
+* **Scrolling the two bars with a mouse.** Both bars are wider than the editor panel and are scrolled
+  by a swipe, which is why their scrollbars are hidden. Where the main pointer is a mouse
+  (`@media (hover: hover) and (pointer: fine)`) the CSS shows a thin scrollbar, and the wheel scrolls
+  a bar sideways while the mouse is over it (`wheel` handler in `src/app.js`; a sideways wheel or
+  trackpad swipe, a ctrl-wheel and a bar with nothing more in that direction are left to the
+  browser). A touch screen is not affected: no scrollbar, a swipe as before. Checked in Edge on
+  Windows (a thin scrollbar under both bars, the wheel moves them, the end-to-end test does it
+  too) and in a touch emulation (no scrollbar); not in Safari or Firefox, and not on macOS, where the
+  system may draw the scrollbar only while it is scrolled (the wheel works either way).
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a

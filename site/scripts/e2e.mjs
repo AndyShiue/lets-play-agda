@@ -533,6 +533,27 @@ try {
   await inputTakesFocus();
   await finger(bar.locator('button').first());
   check('a finger on the symbol bar gets the keyboard back first: the symbol bar acts as it always did', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
+
+  // The bars are scrolled by a swipe; a mouse has none: a thin scrollbar, and over a bar the wheel scrolls sideways.
+  log('--- 2e. the bars with a mouse: a scrollbar, and the wheel scrolls sideways');
+  const barScroll = (selector) => page.locator(selector).evaluate((e) => ({ left: Math.round(e.scrollLeft), room: e.scrollWidth - e.clientWidth, scrollbar: getComputedStyle(e).scrollbarWidth }));
+  for (const [name, selector] of [['command bar', '#command-bar'], ['symbol bar', '#symbol-bar']]) {
+    await page.locator(selector).evaluate((e) => { e.scrollLeft = 0; }); // the clicks before may have left it at the far end
+    const start = await barScroll(selector);
+    check(`the ${name} has a thin scrollbar with a mouse`, start.scrollbar === 'thin', JSON.stringify(start));
+    if (start.room > 0) {
+      await page.locator(selector).hover();
+      await page.mouse.wheel(0, 150);
+      await sleep(300);
+      const moved = await barScroll(selector);
+      await page.mouse.wheel(0, -5000);
+      await sleep(300);
+      const back = await barScroll(selector);
+      check(`the wheel over the ${name} scrolls it sideways, and back`, moved.left > start.left && back.left === 0, `${start.left} → ${moved.left} → ${back.left} of ${start.room}`);
+    } else {
+      check(`the ${name} fits the panel here: nothing to scroll`, name !== 'command bar', JSON.stringify(start)); // the command bar is wide enough to overflow
+    }
+  }
   await page.screenshot({ path: path.join(OUT, '2c-command-bar.png') });
 
   // ---- 3. solve -----------------------------------------------------------

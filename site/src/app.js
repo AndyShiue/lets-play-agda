@@ -710,6 +710,21 @@
   });
   applyCommandBar();
 
+  // The bars are wider than the editor panel, and a swipe scrolls them. A mouse's wheel scrolls up and
+  // down, so over a bar it scrolls sideways (the CSS shows a thin scrollbar for a mouse). A sideways
+  // wheel or trackpad swipe is left alone, and so is a bar that has nothing more in that direction.
+  for (const bar of [symbolBar, commandBar]) {
+    bar.addEventListener('wheel', (event) => {
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY) || event.ctrlKey) return; // ctrl: a pinch or a zoom
+      const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? bar.clientWidth : 1; // lines, pages, pixels
+      const by = event.deltaY * unit;
+      const room = by < 0 ? bar.scrollLeft : bar.scrollWidth - bar.clientWidth - bar.scrollLeft;
+      if (room < 1) return;
+      bar.scrollLeft += by;
+      event.preventDefault();
+    }, { passive: false });
+  }
+
   channel?.addEventListener('message', ({ data }) => {
     switch (data?.t) {
       case 'ready':

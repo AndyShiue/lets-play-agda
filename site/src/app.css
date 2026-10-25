@@ -248,6 +248,13 @@ details.solution > summary { cursor: pointer; padding: .2rem 0; }
 .command-bar button { flex: none; height: 2.9rem; padding: .1rem .75rem; display: grid; place-items: center; align-content: center; gap: .1rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--bg); color: var(--fg); cursor: pointer; touch-action: manipulation; white-space: nowrap; }
 .command-bar button:hover { border-color: var(--accent); }
 .command-bar button:active { background: var(--accent-soft); }
+/* the bars are scrolled by a swipe, and have no scrollbar for that; with a mouse there is no swipe: a thin one (it shows that there is more), and the wheel scrolls sideways over them (app.js) */
+@media (hover: hover) and (pointer: fine) {
+  .symbol-bar, .command-bar { scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+  .symbol-bar::-webkit-scrollbar, .command-bar::-webkit-scrollbar { display: block; height: 8px; }
+  .symbol-bar::-webkit-scrollbar-thumb, .command-bar::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+  .symbol-bar::-webkit-scrollbar-track, .command-bar::-webkit-scrollbar-track { background: transparent; }
+}
 .command-bar .cmd-l { font: 600 .85rem/1.1 var(--font); }
 .command-bar .cmd-s { font: .62rem/1 var(--mono); color: var(--muted); }
 .editor-status { position: absolute; inset: 2.6rem 0 0 0; display: grid; place-items: center; text-align: center; padding: 2rem; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--muted); font-size: .95rem; z-index: 2; pointer-events: none; }
