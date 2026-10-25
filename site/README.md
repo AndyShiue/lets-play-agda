@@ -112,14 +112,15 @@ run yet.
   (the tutorial says to put the expression there), and asks for an expression outside one.
   *Cancel* presses Esc in the prompt of the Agda panel (agda-mode's own command for Esc does
   not take such a prompt away here), and otherwise runs agda-mode's command.
-  A phone puts its keyboard up when an editable element takes the focus, and most commands
-  (Load, Cancel, …) make agda-mode give the focus to the editor. So a *touch* on a button, when
-  the editor has no keyboard up (its text input has no focus), sets `inputmode="none"` and
-  `virtualkeyboardpolicy="manual"` on the editor's text input (`holdKeyboardBack` in `src/app.js`;
-  the editor is a same-origin frame) until the reader touches anything else; a mouse click
-  does nothing of the kind, and a keyboard that is up stays up. The prompts of the Agda panel
-  (*Evaluate* outside a hole, *Infer type*) are left alone: they need the keyboard. The symbol
-  bar is not part of this: a finger on it lets go first, and it acts as it always did.
+  A phone puts its keyboard up when an editable element takes the focus, and (Chrome) also when a
+  script calls `focus()` on one that has the focus already, as it is after the reader put the keyboard
+  away with Back. Most commands (Load, Cancel, …) make agda-mode do that to the editor. So a *touch* on
+  a button makes the editor's text input `inert` (`holdKeyboardBack` in `src/app.js`; the editor is a
+  same-origin frame): it cannot take the focus, so no keyboard comes up, and if it has the focus it lets
+  go of it (a keyboard that is up goes away). This holds until the reader touches anything else: the
+  editor, the symbol bar, a button of the page, or a click of a mouse. The prompts of the Agda panel
+  (*Evaluate* outside a hole, *Infer type*) are left alone: they need the keyboard. The symbol bar is not
+  part of this: a finger on it lets go first, and it acts as it always did.
 * **Scrolling the two bars with a mouse.** Both bars are wider than the editor panel and are scrolled
   by a swipe, which is why their scrollbars are hidden. Where the main pointer is a mouse
   (`@media (hover: hover) and (pointer: fine)`) the CSS shows a thin scrollbar, and the wheel scrolls
@@ -224,10 +225,13 @@ run yet.
   keyboards of real phones do is unknown. The symbol bar inserts into the editor only, not
   into the prompt of the Agda panel (`C-c C-v`).
 * Keeping the keyboard down after a touch on the command bar is checked with the focus as a
-  proxy (Edge, a desktop with a touch emulation, and the end-to-end test: the text input the editor
-  focuses has `inputmode="none"`), not with a phone's keyboard. Whether Chrome for Android or Safari
-  on iOS honour those attributes on the editor's text input (an `EditContext` element in Chrome,
-  a textarea elsewhere) is not known; in Edge 156 `EditContext` has no `inputMode` of its own.
+  proxy (Edge, a desktop with a touch emulation, and the end-to-end test: no text input has the
+  focus after the command, also when one had it before), not with a phone's keyboard. A first version
+  set `inputmode="none"` on the text input instead; on Edge 155 for Android the keyboard still came up
+  (reported by the user), most likely because the text input had the focus already and agda-mode's
+  `focus()` brought the keyboard back, and perhaps because `EditContext` does not look at the
+  attribute (Edge 156 for Windows has no `inputMode` on it). `inert` does not depend on either. It
+  has not been tried on a phone yet (Safari on iOS not at all).
 * The command bar's buttons run agda-mode's commands; their results (the Agda panel) and
   prompts are agda-mode's. Only *Load*, *Goal & context*, *Evaluate* and *Cancel* are
   covered by the end-to-end test; the others (Case split, Give, Refine, Auto, …) use the same

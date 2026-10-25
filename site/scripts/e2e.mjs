@@ -494,45 +494,50 @@ try {
   const gone = await waitFor('the prompt to go', async () => ((await expressionPrompt(page)) ? null : true), 15).catch(() => null);
   check('"Cancel" takes the question away', !!gone);
 
-  // On a phone the keyboard comes up when an editable element takes the focus, and Cancel (like Load) makes
-  // agda-mode put the focus in the editor. A mouse is no phone: a touch is a click that says it is one. What is
-  // looked at is whether the text input the editor focuses asks for no keyboard (inputmode none); the keyboard
-  // itself is not seen here.
+  // On a phone the keyboard comes up when an editable element takes the focus (and when a script calls focus() on
+  // one that has it already), and Load or Cancel make agda-mode do that to the editor. A mouse is no phone: a touch
+  // is a click that says it is one. What is looked at is whether the editor's text input can take the focus (it is
+  // inert after a touch on the bar); the keyboard itself is not seen here.
   log('--- 2d. the command bar on a touch screen: no keyboard');
   const TEXT_INPUT = '.native-edit-context, textarea.inputarea';
-  const initialInput = JSON.stringify(await editorFrame(page).evaluate((s) => { const e = document.querySelector(s); return { mode: e.inputMode, policy: e.getAttribute('virtualkeyboardpolicy') }; }, TEXT_INPUT));
-  const focusedInput = () => editorFrame(page).evaluate((s) => {
-    const e = document.activeElement;
-    return e?.matches?.(s) ? { mode: e.inputMode, policy: e.getAttribute('virtualkeyboardpolicy') } : null;
+  const inputState = () => editorFrame(page).evaluate((selector) => {
+    const inputs = [...document.querySelectorAll(selector)];
+    return { focused: inputs.some((e) => e === document.activeElement), inert: inputs.length > 0 && inputs.every((e) => e.inert) };
   }, TEXT_INPUT);
   const blurEditor = () => editorFrame(page).evaluate(() => document.activeElement?.blur());
   const cancelButton = commandBar.locator('button[data-key="cancel"]');
   const tap = (button) => button.evaluate((b) => b.dispatchEvent(new PointerEvent('click', { pointerType: 'touch', bubbles: true, cancelable: true })));
   const finger = (locator) => locator.evaluate((e) => e.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true, cancelable: true })));
-  const inputTakesFocus = () => waitFor('the editor to take the focus', focusedInput, 30).catch(() => null);
+  const fingerOnEditor = () => editorFrame(page).evaluate(() => document.querySelector('.monaco-editor')?.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })));
 
   await blurEditor();
-  await tap(cancelButton);
-  const held = await inputTakesFocus();
-  check('a touch on the bar, when the editor has no keyboard up, leaves the text input it focuses asking for none (inputmode none)', held?.mode === 'none', JSON.stringify(held));
-  await editorFrame(page).evaluate(() => document.querySelector('.monaco-editor')?.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })));
-  check('the reader touching the editor gets its keyboard back', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
+  const beforeLoad = await agdaPanel(page);
+  await tap(commandBar.locator('button[data-key="load"]'));
+  const loaded = await waitAgdaChange(page, beforeLoad, /All Goals|All Done|Error|Warning/, 120).catch(() => null);
+  await sleep(1500);
+  const held = await inputState();
+  check('a touch on the bar still runs the command (Load: the Agda panel shows its result)', !!loaded, (loaded ?? '').slice(0, 60));
+  check('…and the editor\'s text input did not take the focus (it is inert), so no keyboard comes up', !held.focused && held.inert, JSON.stringify(held));
+  await fingerOnEditor();
+  check('the reader touching the editor lets its text input work again', JSON.stringify(await inputState()) === JSON.stringify({ focused: false, inert: false }), JSON.stringify(await inputState()));
 
-  await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool :' }).first().click(); // the keyboard is up: the text input has the focus
+  // the keyboard was put away, but the text input still has the focus: a script's focus() would bring the keyboard back
+  await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool :' }).first().click();
+  const focusedBefore = await inputState();
   await tap(cancelButton);
   await sleep(2000);
-  check('with the keyboard up already a touch on the bar leaves it as it is', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
+  const letGo = await inputState();
+  check('a touch on the bar makes a text input that has the focus let go of it', focusedBefore.focused && !letGo.focused && letGo.inert, JSON.stringify({ focusedBefore, letGo }));
 
-  await blurEditor();
-  await cancelButton.click();
-  const clicked = await inputTakesFocus();
-  check('a mouse click on the bar holds nothing back', JSON.stringify(clicked) === initialInput, JSON.stringify(clicked));
+  await cancelButton.click(); // a mouse click: whatever the finger held back is let go, and agda-mode takes the focus for the editor as it always did
+  const clicked = await waitFor('the editor to take the focus', async () => { const st = await inputState(); return st.focused ? st : null; }, 30).catch(() => null);
+  check('a mouse click on the bar holds nothing back', !!clicked && !clicked.inert, JSON.stringify(clicked));
 
   await blurEditor();
   await tap(cancelButton);
-  await inputTakesFocus();
+  await sleep(1000);
   await finger(bar.locator('button').first());
-  check('a finger on the symbol bar gets the keyboard back first: the symbol bar acts as it always did', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
+  check('a finger on the symbol bar lets the text input work first: the symbol bar acts as it always did', JSON.stringify(await inputState()) === JSON.stringify({ focused: false, inert: false }), JSON.stringify(await inputState()));
 
   // The bars are scrolled by a swipe; a mouse has none: a thin scrollbar, and over a bar the wheel scrolls sideways.
   log('--- 2e. the bars with a mouse: a scrollbar, and the wheel scrolls sideways');

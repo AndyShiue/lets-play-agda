@@ -650,15 +650,16 @@
     return pressed;
   }
 
-  // A phone puts its keyboard up when an editable element takes the focus, and most commands of
-  // the bar make agda-mode give the focus to the editor (Load, Cancel, …): the keyboard would come
-  // up for nothing. So a tap of the bar tells the editor's text input not to ask for a keyboard
-  // (the editor is a same-origin frame, like for pressEscapeInPrompt) until the reader touches
-  // anything else (the symbol bar, the editor, …: each then behaves as it always did). When the
-  // keyboard is up already (the text input has the focus) it stays, and the questions of the Agda
-  // panel (Evaluate asks for an expression) are left alone: they need the keyboard.
+  // A phone puts its keyboard up when an editable element takes the focus, and when a script calls
+  // focus() on one that has it already (the reader put the keyboard away, the element still has the
+  // focus). Most commands of the bar make agda-mode do that to the editor (Load, Cancel, …): the keyboard
+  // would come up for nothing, or come back. So a touch on the bar makes the editor's text input inert
+  // (it cannot take the focus, so no keyboard comes up for it; if it has the focus, it lets go of it and
+  // the keyboard goes away) until the reader touches anything else (the symbol bar, the editor, …: each
+  // then behaves as it always did). The editor is a same-origin frame, like for pressEscapeInPrompt. The
+  // questions of the Agda panel (Evaluate asks for an expression) are left alone: they need the keyboard.
   const TEXT_INPUT = '.native-edit-context, textarea.inputarea'; // what Monaco types into: an EditContext, or a textarea
-  let hushed = null; // { doc, saved: Map(element → what it was), onFocus }
+  let hushed = null; // { doc, saved: Map(element → was it inert), onFocus }
 
   function releaseKeyboard() {
     if (!hushed) return;
@@ -667,11 +668,7 @@
     try {
       doc.removeEventListener('focusin', onFocus, true);
       doc.removeEventListener('pointerdown', releaseKeyboard, true);
-      for (const [element, was] of saved) {
-        for (const [name, value] of [['inputmode', was.mode], ['virtualkeyboardpolicy', was.policy]]) {
-          if (value === null) element.removeAttribute(name); else element.setAttribute(name, value);
-        }
-      }
+      for (const [element, wasInert] of saved) element.inert = wasInert;
     } catch { /* the editor is gone */ }
   }
 
@@ -679,15 +676,15 @@
     let doc = null;
     try { doc = frame?.contentDocument ?? null; } catch { /* not accessible */ }
     if (hushed && hushed.doc !== doc) releaseKeyboard(); // a new editor
-    // a mouse has no keyboard to hold back; some browsers do not say what touched (a click without a pointerType)
+    // a mouse has no keyboard to hold back (and lets go of what a finger held); some browsers do not say what touched (a click without a pointerType)
     const touched = event.pointerType ? event.pointerType !== 'mouse' : matchMedia('(pointer: coarse)').matches;
-    if (!doc || hushed || !touched || doc.activeElement?.matches?.(TEXT_INPUT)) return;
+    if (!touched) releaseKeyboard();
+    if (!doc || hushed || !touched) return;
     const saved = new Map();
     const hush = (element) => {
-      if (saved.has(element)) return;
-      saved.set(element, { mode: element.getAttribute('inputmode'), policy: element.getAttribute('virtualkeyboardpolicy') });
-      element.setAttribute('inputmode', 'none');
-      element.setAttribute('virtualkeyboardpolicy', 'manual');
+      if (!saved.has(element)) saved.set(element, element.inert);
+      element.inert = true;
+      if (doc.activeElement === element) element.blur();
     };
     const onFocus = (focusEvent) => { if (focusEvent.target.matches?.(TEXT_INPUT)) hush(focusEvent.target); }; // an input that is made later
     hushed = { doc, saved, onFocus };
