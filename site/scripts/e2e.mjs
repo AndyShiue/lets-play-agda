@@ -662,11 +662,21 @@ try {
   }
   page = await context.newPage();
   page.on('pageerror', (e) => errors.push(String(e).slice(0, 200)));
+  // what the page saw, for when the notice does not come (it failed once in CI, never locally): was a worker in control at
+  // the start, when did the controller change and was the page visible then (a hidden page reloads instead of offering), did it navigate again
+  await page.addInitScript(() => {
+    window.__update = { hadController: !!navigator.serviceWorker?.controller, visibility: document.visibilityState };
+    navigator.serviceWorker?.addEventListener('controllerchange', () => { window.__update.controllerchangeMs = Math.round(performance.now()); window.__update.visibilityAtChange = document.visibilityState; });
+  });
+  const navigations = [];
+  const startedAt = Date.now();
+  page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations.push(Math.round((Date.now() - startedAt) / 1000)); });
   await page.goto(PAGE);
   await page.waitForSelector('#exercise-1', { timeout: 30000 });
   // the new worker takes over while the page is open: the page offers a reload
   const offered = await page.waitForSelector('.update-bar', { timeout: 60000 }).then(() => true, () => false);
-  check('the page offers a reload once the new version has taken over', offered);
+  const seen = offered ? '' : JSON.stringify({ ...(await page.evaluate(() => window.__update).catch(() => null)), navigationsAtSeconds: navigations });
+  check('the page offers a reload once the new version has taken over', offered, seen);
   if (offered) {
     // the notice is in the colours of the theme (looked at by eye: .cache/e2e/update-notice-dark.png)
     await page.emulateMedia({ colorScheme: 'dark' });
