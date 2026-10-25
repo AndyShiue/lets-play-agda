@@ -238,7 +238,7 @@ function renderPage(mod, linking = false) {
         const uses = [...solutionRefs].filter(([key, ref]) => !statementRefs.has(key) && !own.has(ref.entry.name));
         const hints = uses.length
           ? `<div class="hints"><span class="hints-title">${UI.uses}</span> ${uses.map(([, ref]) =>
-            `<a class="hint ${KIND_CLASS[ref.entry.kind]}" href="${escAttr(ref.href)}" title="${escAttr(UI.hintTitle)}">${esc(ref.entry.name)}</a>`).join(' ')}</div>\n`
+            `<a class="hint ${KIND_CLASS[ref.entry.kind]}" href="${escAttr(ref.href)}" title="${escAttr(UI.hintTitle)}"><span class="n">${esc(ref.entry.name)}</span></a>`).join(' ')}</div>\n`
           : '';
         return `<section class="exercise" id="exercise-${exercise.ordinal}" data-module="${escAttr(mod.name)}" data-ordinal="${exercise.ordinal}" data-id="${escAttr(exercise.id)}">
 <div class="exercise-head"><span class="badge">${UI.exercise} ${exercise.ordinal}</span><code>${esc(exercise.id)}</code></div>

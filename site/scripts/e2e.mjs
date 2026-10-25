@@ -348,12 +348,16 @@ try {
   // exercise 2's reference solution uses false and true: blurred until clicked
   const chips = page.locator('#exercise-2 .hints a.hint');
   check('exercise 2 lists the names its reference solution uses: false, true', (await chips.allInnerTexts()).join(',') === 'false,true');
-  const filter = await chips.first().evaluate((a) => getComputedStyle(a).filter);
-  check('the names are blurred until clicked', /blur/.test(filter), filter);
+  // the name is blurred in the colour of the text (blurred in its own colour it is a pale smudge on a light page), the chip stays sharp
+  const look = await chips.first().evaluate((a) => ({
+    chip: getComputedStyle(a).filter, name: getComputedStyle(a.querySelector('.n')).filter, ink: getComputedStyle(a.querySelector('.n')).color, text: getComputedStyle(document.body).color,
+  }));
+  check('the names are blurred until clicked', /blur/.test(look.name), look.name);
+  check('…the chip itself is not, and the name is in the colour of the text', look.chip === 'none' && look.ink === look.text, JSON.stringify(look));
   const urlBeforeClick = page.url();
   await chips.first().click();
   // the blur goes away in a short transition
-  const unblurred = await waitFor('the blur to go', () => chips.first().evaluate((a) => a.classList.contains('shown') && getComputedStyle(a).filter === 'none'), 5).catch(() => false);
+  const unblurred = await waitFor('the blur to go', () => chips.first().evaluate((a) => a.classList.contains('shown') && getComputedStyle(a.querySelector('.n')).filter === 'none'), 5).catch(() => false);
   check('a click shows the name and stays on the page', !!unblurred && page.url() === urlBeforeClick);
   await chips.first().click();
   check('the next click goes to its declaration', new URL(page.url()).hash === '#false', page.url());
