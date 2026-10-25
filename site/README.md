@@ -77,11 +77,13 @@ run yet.
   something to show) the page lists the names of the earlier material that the
   reference solution uses, except those the exercise shows already: blurred, so that
   they do not give the solution away; a click shows a name, the next click goes to
-  its declaration. Only the name is blurred (`.n` in the chip; `filter: blur(.26em)` in
-  `app.css`, the one number to turn if it is too much or too little), in the colour of
-  the text, and the chip stays a sharp box: blurred together with its frame and in the
-  colour of its kind (green, blue) it was a pale smudge on a light page. 397 of the 446
-  exercises have such a list. It follows from the
+  its declaration. Only the name is blurred (`.n` in the chip; `filter: blur(.35em)` in
+  `app.css`, the one number to turn if it is too much or too little) and the chip stays a
+  sharp box, tinted with the colour of the kind of name (green for a constructor, blue for
+  a function, …), the name in it bold and a little darker (lighter in the dark theme):
+  blurred together with its frame, or thin and in the plain colour of its kind, it was a
+  pale smudge on a light page, and with the colour of the text the kind could not be seen.
+  397 of the 446 exercises have such a list. It follows from the
   same name resolution, so a name that is linked wrongly can be in a list, and one
   that is not found can be missing.
 * **The editor** opens in a panel on the right (an `<iframe src="editor/">`) when

@@ -348,12 +348,20 @@ try {
   // exercise 2's reference solution uses false and true: blurred until clicked
   const chips = page.locator('#exercise-2 .hints a.hint');
   check('exercise 2 lists the names its reference solution uses: false, true', (await chips.allInnerTexts()).join(',') === 'false,true');
-  // the name is blurred in the colour of the text (blurred in its own colour it is a pale smudge on a light page), the chip stays sharp
-  const look = await chips.first().evaluate((a) => ({
-    chip: getComputedStyle(a).filter, name: getComputedStyle(a.querySelector('.n')).filter, ink: getComputedStyle(a.querySelector('.n')).color, text: getComputedStyle(document.body).color,
-  }));
+  // the chip stays sharp and is tinted with the colour of the kind of name (false is a constructor: green), the name in it is blurred
+  const look = await chips.first().evaluate((a) => {
+    // a computed colour is rgb(…) or, for a mix, color(srgb 0.1 0.2 0.3)
+    const rgb = (s) => { const n = s.match(/[\d.]+/g).map(Number).slice(0, 3); return s.startsWith('color(') ? n.map((v) => Math.round(v * 255)) : n; };
+    const ink = rgb(getComputedStyle(a.querySelector('.n')).color);
+    const tint = rgb(getComputedStyle(a).backgroundColor);
+    const page = rgb(getComputedStyle(document.body).backgroundColor);
+    return {
+      chip: getComputedStyle(a).filter, name: getComputedStyle(a.querySelector('.n')).filter, ink, tint, page,
+      tinted: Math.max(...tint.map((v, i) => Math.abs(v - page[i]))) >= 8, green: ink[1] > ink[0] + 15 && ink[1] > ink[2] + 15,
+    };
+  });
   check('the names are blurred until clicked', /blur/.test(look.name), look.name);
-  check('…the chip itself is not, and the name is in the colour of the text', look.chip === 'none' && look.ink === look.text, JSON.stringify(look));
+  check('…the chip itself is not, it is tinted, and the name keeps the colour of its kind (green)', look.chip === 'none' && look.tinted && look.green, JSON.stringify(look));
   const urlBeforeClick = page.url();
   await chips.first().click();
   // the blur goes away in a short transition

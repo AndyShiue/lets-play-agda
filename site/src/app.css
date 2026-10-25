@@ -182,12 +182,14 @@ pre.agda .decl { position: absolute; margin-top: -4.5rem; }
 pre.agda a { text-decoration: none; }
 pre.agda a:hover { text-decoration: underline; text-underline-offset: .15em; }
 /* the names the reference solution uses: the name is blurred until clicked, then the chip is a link to the declaration.
-   Only the name is blurred, not the chip (it stays a sharp, clickable box), and in the colour of the text: blurred
-   in its own colour (green, blue, …) it is a pale smudge, hardly to be seen on a light page */
+   Only the name is blurred, not the chip (it stays a sharp, clickable box). The colour of the kind of name (green for a
+   constructor, blue for a function, …) stays visible: the chip is tinted with it, and the name is bold and a little
+   darker (lighter in the dark theme), because blurred thin strokes in that colour alone are a pale smudge on a light page.
+   The chip's own colour is the kind's (.dt, .ct, .fn, .fd), which is what currentColor is here. */
 .hints { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .5rem; margin-top: .75rem; font-size: .88rem; color: var(--muted); }
-.hints .hint { padding: .05rem .45rem; border: 1px solid color-mix(in srgb, var(--muted) 55%, var(--line)); border-radius: .35rem; background: var(--bg); font: .85rem/1.5 var(--mono); user-select: none; cursor: pointer; }
+.hints .hint { padding: .05rem .45rem; border: 1px solid color-mix(in srgb, currentColor 55%, var(--line)); border-radius: .35rem; background: color-mix(in srgb, currentColor 16%, var(--bg)); font: 700 .85rem/1.5 var(--mono); user-select: none; cursor: pointer; }
 .hints .hint:hover { border-color: var(--accent); }
-.hints .hint .n { display: inline-block; color: var(--fg); filter: blur(.26em); transition: filter .15s; }
+.hints .hint .n { display: inline-block; color: color-mix(in srgb, currentColor 85%, var(--fg)); filter: blur(.35em) saturate(1.5); transition: filter .15s; }
 .hints .hint.shown { user-select: text; }
 .hints .hint.shown .n { color: inherit; filter: none; }
 .your-code { margin-top: .8rem; }
