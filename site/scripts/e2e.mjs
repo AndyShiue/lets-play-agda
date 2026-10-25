@@ -493,6 +493,46 @@ try {
   await commandBar.locator('button[data-key="cancel"]').click();
   const gone = await waitFor('the prompt to go', async () => ((await expressionPrompt(page)) ? null : true), 15).catch(() => null);
   check('"Cancel" takes the question away', !!gone);
+
+  // On a phone the keyboard comes up when an editable element takes the focus, and Cancel (like Load) makes
+  // agda-mode put the focus in the editor. A mouse is no phone: a touch is a click that says it is one. What is
+  // looked at is whether the text input the editor focuses asks for no keyboard (inputmode none); the keyboard
+  // itself is not seen here.
+  log('--- 2d. the command bar on a touch screen: no keyboard');
+  const TEXT_INPUT = '.native-edit-context, textarea.inputarea';
+  const initialInput = JSON.stringify(await editorFrame(page).evaluate((s) => { const e = document.querySelector(s); return { mode: e.inputMode, policy: e.getAttribute('virtualkeyboardpolicy') }; }, TEXT_INPUT));
+  const focusedInput = () => editorFrame(page).evaluate((s) => {
+    const e = document.activeElement;
+    return e?.matches?.(s) ? { mode: e.inputMode, policy: e.getAttribute('virtualkeyboardpolicy') } : null;
+  }, TEXT_INPUT);
+  const blurEditor = () => editorFrame(page).evaluate(() => document.activeElement?.blur());
+  const cancelButton = commandBar.locator('button[data-key="cancel"]');
+  const tap = (button) => button.evaluate((b) => b.dispatchEvent(new PointerEvent('click', { pointerType: 'touch', bubbles: true, cancelable: true })));
+  const finger = (locator) => locator.evaluate((e) => e.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true, cancelable: true })));
+  const inputTakesFocus = () => waitFor('the editor to take the focus', focusedInput, 30).catch(() => null);
+
+  await blurEditor();
+  await tap(cancelButton);
+  const held = await inputTakesFocus();
+  check('a touch on the bar, when the editor has no keyboard up, leaves the text input it focuses asking for none (inputmode none)', held?.mode === 'none', JSON.stringify(held));
+  await editorFrame(page).evaluate(() => document.querySelector('.monaco-editor')?.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })));
+  check('the reader touching the editor gets its keyboard back', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
+
+  await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool :' }).first().click(); // the keyboard is up: the text input has the focus
+  await tap(cancelButton);
+  await sleep(2000);
+  check('with the keyboard up already a touch on the bar leaves it as it is', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
+
+  await blurEditor();
+  await cancelButton.click();
+  const clicked = await inputTakesFocus();
+  check('a mouse click on the bar holds nothing back', JSON.stringify(clicked) === initialInput, JSON.stringify(clicked));
+
+  await blurEditor();
+  await tap(cancelButton);
+  await inputTakesFocus();
+  await finger(bar.locator('button').first());
+  check('a finger on the symbol bar gets the keyboard back first: the symbol bar acts as it always did', JSON.stringify(await focusedInput()) === initialInput, JSON.stringify(await focusedInput()));
   await page.screenshot({ path: path.join(OUT, '2c-command-bar.png') });
 
   // ---- 3. solve -----------------------------------------------------------

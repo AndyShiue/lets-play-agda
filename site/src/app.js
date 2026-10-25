@@ -650,9 +650,57 @@
     return pressed;
   }
 
+  // A phone puts its keyboard up when an editable element takes the focus, and most commands of
+  // the bar make agda-mode give the focus to the editor (Load, Cancel, …): the keyboard would come
+  // up for nothing. So a tap of the bar tells the editor's text input not to ask for a keyboard
+  // (the editor is a same-origin frame, like for pressEscapeInPrompt) until the reader touches
+  // anything else (the symbol bar, the editor, …: each then behaves as it always did). When the
+  // keyboard is up already (the text input has the focus) it stays, and the questions of the Agda
+  // panel (Evaluate asks for an expression) are left alone: they need the keyboard.
+  const TEXT_INPUT = '.native-edit-context, textarea.inputarea'; // what Monaco types into: an EditContext, or a textarea
+  let hushed = null; // { doc, saved: Map(element → what it was), onFocus }
+
+  function releaseKeyboard() {
+    if (!hushed) return;
+    const { doc, saved, onFocus } = hushed;
+    hushed = null;
+    try {
+      doc.removeEventListener('focusin', onFocus, true);
+      doc.removeEventListener('pointerdown', releaseKeyboard, true);
+      for (const [element, was] of saved) {
+        for (const [name, value] of [['inputmode', was.mode], ['virtualkeyboardpolicy', was.policy]]) {
+          if (value === null) element.removeAttribute(name); else element.setAttribute(name, value);
+        }
+      }
+    } catch { /* the editor is gone */ }
+  }
+
+  function holdKeyboardBack(event) {
+    let doc = null;
+    try { doc = frame?.contentDocument ?? null; } catch { /* not accessible */ }
+    if (hushed && hushed.doc !== doc) releaseKeyboard(); // a new editor
+    // a mouse has no keyboard to hold back; some browsers do not say what touched (a click without a pointerType)
+    const touched = event.pointerType ? event.pointerType !== 'mouse' : matchMedia('(pointer: coarse)').matches;
+    if (!doc || hushed || !touched || doc.activeElement?.matches?.(TEXT_INPUT)) return;
+    const saved = new Map();
+    const hush = (element) => {
+      if (saved.has(element)) return;
+      saved.set(element, { mode: element.getAttribute('inputmode'), policy: element.getAttribute('virtualkeyboardpolicy') });
+      element.setAttribute('inputmode', 'none');
+      element.setAttribute('virtualkeyboardpolicy', 'manual');
+    };
+    const onFocus = (focusEvent) => { if (focusEvent.target.matches?.(TEXT_INPUT)) hush(focusEvent.target); }; // an input that is made later
+    hushed = { doc, saved, onFocus };
+    for (const element of doc.querySelectorAll(TEXT_INPUT)) hush(element);
+    doc.addEventListener('focusin', onFocus, true);
+    doc.addEventListener('pointerdown', releaseKeyboard, true); // the reader touches the editor
+  }
+  document.addEventListener('pointerdown', (event) => { if (!commandBar.contains(event.target)) releaseKeyboard(); }, true); // …or anything else of the page
+
   commandBar.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-key]');
     if (!button) return;
+    holdKeyboardBack(event);
     if (button.dataset.key === 'cancel' && pressEscapeInPrompt()) return;
     channel?.postMessage({ t: 'agda', key: button.dataset.key });
   });

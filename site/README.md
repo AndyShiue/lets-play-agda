@@ -112,6 +112,14 @@ run yet.
   (the tutorial says to put the expression there), and asks for an expression outside one.
   *Cancel* presses Esc in the prompt of the Agda panel (agda-mode's own command for Esc does
   not take such a prompt away here), and otherwise runs agda-mode's command.
+  A phone puts its keyboard up when an editable element takes the focus, and most commands
+  (Load, Cancel, …) make agda-mode give the focus to the editor. So a *touch* on a button, when
+  the editor has no keyboard up (its text input has no focus), sets `inputmode="none"` and
+  `virtualkeyboardpolicy="manual"` on the editor's text input (`holdKeyboardBack` in `src/app.js`;
+  the editor is a same-origin frame) until the reader touches anything else; a mouse click
+  does nothing of the kind, and a keyboard that is up stays up. The prompts of the Agda panel
+  (*Evaluate* outside a hole, *Infer type*) are left alone: they need the keyboard. The symbol
+  bar is not part of this: a finger on it lets go first, and it acts as it always did.
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a
@@ -206,6 +214,11 @@ run yet.
   `interactive-widget=resizes-content`, which Safari does not support) and what the
   keyboards of real phones do is unknown. The symbol bar inserts into the editor only, not
   into the prompt of the Agda panel (`C-c C-v`).
+* Keeping the keyboard down after a touch on the command bar is checked with the focus as a
+  proxy (Edge, a desktop with a touch emulation, and the end-to-end test: the text input the editor
+  focuses has `inputmode="none"`), not with a phone's keyboard. Whether Chrome for Android or Safari
+  on iOS honour those attributes on the editor's text input (an `EditContext` element in Chrome,
+  a textarea elsewhere) is not known; in Edge 156 `EditContext` has no `inputMode` of its own.
 * The command bar's buttons run agda-mode's commands; their results (the Agda panel) and
   prompts are agda-mode's. Only *Load*, *Goal & context*, *Evaluate* and *Cancel* are
   covered by the end-to-end test; the others (Case split, Give, Refine, Auto, …) use the same
