@@ -197,6 +197,11 @@ fs.cpSync(path.join(root, 'dist'), SERVED, { recursive: true });
 await startServer();
 const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'lpa-site-e2e-'));
 const context = await chromium.launchPersistentContext(profile, { channel: CHANNEL, headless: !HEADED, viewport: { width: 1360, height: 900 } });
+// The code for iOS asks for -webkit-touch-callout, which only iOS has: here it is said to exist (the CSS of the editor page, in an @supports, is not affected)
+await context.addInitScript(() => {
+  const supports = CSS.supports.bind(CSS);
+  CSS.supports = (property, value) => (property === '-webkit-touch-callout' ? true : supports(property, value));
+});
 const errors = [];
 let exitCode = 0;
 
@@ -518,7 +523,11 @@ try {
   }, TEXT_INPUT);
   const blurEditor = () => editorFrame(page).evaluate(() => document.activeElement?.blur());
   const cancelButton = commandBar.locator('button[data-key="cancel"]');
-  const tap = (button) => button.evaluate((b) => b.dispatchEvent(new PointerEvent('click', { pointerType: 'touch', bubbles: true, cancelable: true })));
+  // a tap as Safari reports it: the pointerdown of a finger, then a click that says 'mouse' (what the click says cannot be trusted)
+  const tap = (button) => button.evaluate((b) => {
+    b.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true, cancelable: true }));
+    b.dispatchEvent(new PointerEvent('click', { pointerType: 'mouse', bubbles: true, cancelable: true }));
+  });
   const finger = (locator) => locator.evaluate((e) => e.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true, cancelable: true })));
   const fingerOnEditor = () => editorFrame(page).evaluate(() => document.querySelector('.monaco-editor')?.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', bubbles: true })));
 
@@ -550,6 +559,30 @@ try {
   await sleep(1000);
   await finger(bar.locator('button').first());
   check('a finger on the symbol bar lets the text input work first: the symbol bar acts as it always did', JSON.stringify(await inputState()) === JSON.stringify({ focused: false, inert: false }), JSON.stringify(await inputState()));
+
+  // iOS brings the keyboard up for an input that takes the focus in a tap, not for one that has the focus already (the reader put the
+  // keyboard away): a tap in the editor, with no keyboard up, lets the focused text input go and takes it again, once.
+  log('--- 2d. a tap in the editor on iOS');
+  await editorFrame(page).locator('.monaco-editor[data-uri*="Ex1.agda"] .view-line', { hasText: 'idBool :' }).first().click();
+  await editorFrame(page).evaluate(() => {
+    window.__blurs = 0; window.__focuses = 0;
+    for (const e of document.querySelectorAll('.native-edit-context, textarea.inputarea')) { e.addEventListener('blur', () => window.__blurs++); e.addEventListener('focus', () => window.__focuses++); }
+  });
+  const counted = () => editorFrame(page).evaluate(() => ({ blur: window.__blurs, focus: window.__focuses, focused: !!document.activeElement?.matches?.('.native-edit-context, textarea.inputarea') }));
+  const tapEditor = (type) => editorFrame(page).evaluate((t) => {
+    const target = document.querySelector('.monaco-editor .view-lines');
+    for (const name of ['pointerdown', 'pointerup']) target.dispatchEvent(new PointerEvent(name, { pointerType: t, bubbles: true, cancelable: true }));
+    target.dispatchEvent(new PointerEvent('click', { pointerType: 'mouse', bubbles: true })); // what Safari says of the click after a finger
+  }, type);
+  await tapEditor('touch');
+  await sleep(300);
+  const revived = await counted();
+  check('a tap of a finger in the editor lets its focused text input go and takes it again, once (the keyboard comes for an input that takes the focus in a tap)', revived.blur === 1 && revived.focus === 1 && revived.focused, JSON.stringify(revived));
+  await sleep(900);
+  await tapEditor('mouse');
+  await sleep(300);
+  const mouseTap = await counted();
+  check('a click of a mouse in the editor does nothing of the kind', mouseTap.blur === 1 && mouseTap.focus === 1, JSON.stringify(mouseTap));
 
   // The bars are scrolled by a swipe; a mouse has none: a thin scrollbar, and over a bar the wheel scrolls sideways.
   log('--- 2e. the bars with a mouse: a scrollbar, and the wheel scrolls sideways');

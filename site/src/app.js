@@ -447,6 +447,7 @@
     if (!frame) {
       frame = Object.assign(document.createElement('iframe'), { title: t('editorFrame'), src: editorUrl() });
       frame.allow = 'cross-origin-isolated; clipboard-read; clipboard-write';
+      frame.addEventListener('load', watchEditorTaps);
       panel.append(frame);
     }
   }
@@ -583,10 +584,12 @@
   }
 
   // tapping a button must not take the focus from the editor (a phone would put its keyboard away)
-  for (const bar of [symbolBar, $('#command-bar')]) {
-    bar.addEventListener('mousedown', (event) => event.preventDefault());
-    bar.addEventListener('pointerdown', (event) => event.preventDefault());
-  }
+  symbolBar.addEventListener('mousedown', (event) => event.preventDefault());
+  symbolBar.addEventListener('pointerdown', (event) => event.preventDefault());
+  // The command bar does so for a mouse only: a finger on it lets go of the keyboard (see holdKeyboardBack), and a pointerdown that
+  // is cancelled makes WebKit drop the click of a tap (the WebKit of Playwright does: no mousedown, no click; not tried on an iPad).
+  $('#command-bar').addEventListener('mousedown', (event) => { if (!touching(event)) event.preventDefault(); });
+  $('#command-bar').addEventListener('pointerdown', (event) => { if (event.pointerType === 'mouse') event.preventDefault(); });
   symbolBar.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-text]');
     if (button) channel?.postMessage({ t: button.dataset.message, text: button.dataset.text });
@@ -660,6 +663,13 @@
   // questions of the Agda panel (Evaluate asks for an expression) are left alone: they need the keyboard.
   const TEXT_INPUT = '.native-edit-context, textarea.inputarea'; // what Monaco types into: an EditContext, or a textarea
   let hushed = null; // { doc, saved: Map(element → was it inert), onFocus }
+  // What touched is what the pointerdown that began it says. The click that follows a finger says 'mouse' in Safari (on an
+  // iPad, as in the WebKit of Playwright), so a click cannot be asked; some browsers say nothing, and then the kind of screen does.
+  let pointer = { type: '', at: 0 };
+  const touching = (event) => {
+    const type = Date.now() - pointer.at < 2000 ? pointer.type : event.pointerType;
+    return type ? type !== 'mouse' : matchMedia('(pointer: coarse)').matches;
+  };
 
   function releaseKeyboard() {
     if (!hushed) return;
@@ -676,8 +686,8 @@
     let doc = null;
     try { doc = frame?.contentDocument ?? null; } catch { /* not accessible */ }
     if (hushed && hushed.doc !== doc) releaseKeyboard(); // a new editor
-    // a mouse has no keyboard to hold back (and lets go of what a finger held); some browsers do not say what touched (a click without a pointerType)
-    const touched = event.pointerType ? event.pointerType !== 'mouse' : matchMedia('(pointer: coarse)').matches;
+    // a mouse has no keyboard to hold back (and lets go of what a finger held)
+    const touched = touching(event);
     if (!touched) releaseKeyboard();
     if (!doc || hushed || !touched) return;
     const saved = new Map();
@@ -692,7 +702,38 @@
     doc.addEventListener('focusin', onFocus, true);
     doc.addEventListener('pointerdown', releaseKeyboard, true); // the reader touches the editor
   }
-  document.addEventListener('pointerdown', (event) => { if (!commandBar.contains(event.target)) releaseKeyboard(); }, true); // …or anything else of the page
+  document.addEventListener('pointerdown', (event) => {
+    pointer = { type: event.pointerType, at: Date.now() };
+    if (!commandBar.contains(event.target)) releaseKeyboard(); // …or anything else of the page
+  }, true);
+
+  // iOS puts the keyboard up for an input that takes the focus in a tap, not for one that has the focus already: after the
+  // reader has put the keyboard away (the input keeps the focus) a tap in the editor does not bring it back. So a tap in the
+  // editor with no keyboard up lets the focused text input go and takes it again, in the same tap. Only on iOS: elsewhere
+  // the browser brings the keyboard itself, and cannot say whether it is up (the page shrinks for it, see fitToKeyboard).
+  const onIOS = CSS.supports('-webkit-touch-callout', 'none');
+  let keyboardHeight = 0; // what fitToKeyboard sees covered
+  const watched = new WeakSet();
+  function watchEditorTaps() {
+    let doc = null;
+    try { doc = frame?.contentDocument ?? null; } catch { /* not accessible */ }
+    if (!onIOS || !doc || watched.has(doc)) return;
+    watched.add(doc);
+    let touchAt = 0;
+    let revivedAt = 0;
+    doc.addEventListener('pointerdown', (event) => { touchAt = event.pointerType === 'mouse' ? 0 : Date.now(); }, true);
+    const revive = (event) => {
+      const now = Date.now();
+      if (!touchAt || now - touchAt > 2000 || now - revivedAt < 700 || keyboardHeight) return;
+      const input = doc.activeElement;
+      if (!input?.matches?.(TEXT_INPUT) || !event.target.closest?.('.monaco-editor')) return;
+      revivedAt = now;
+      input.blur();
+      input.focus();
+    };
+    doc.addEventListener('pointerup', revive, true); // a pointerup of a finger is a user gesture, as the click that follows it
+    doc.addEventListener('click', revive, true);
+  }
 
   commandBar.addEventListener('click', (event) => {
     const button = event.target.closest('button[data-key]');
@@ -726,6 +767,7 @@
     switch (data?.t) {
       case 'ready':
         editorReady = true;
+        watchEditorTaps();
         applySymbolBar(); // a new editor: tell it which input method to use, and ask for the bars
         applyCommandBar();
         if (pending) channel.postMessage({ t: 'open', module: pending.module, ordinal: Number(pending.ordinal) });
@@ -825,6 +867,7 @@
     const zoomed = Math.abs(viewport.scale - 1) > 0.01;
     const covered = zoomed ? 0 : Math.round(window.innerHeight - viewport.offsetTop - viewport.height);
     const keyboard = covered > 40 ? covered : 0; // the bar of a hardware keyboard on an iPad is some 55px; a smaller difference is no keyboard
+    keyboardHeight = keyboard;
     const root = document.documentElement.style;
     root.setProperty('--kb-bottom', `${keyboard}px`);
     root.setProperty('--vv-top', `${keyboard ? Math.round(viewport.offsetTop) : 0}px`);

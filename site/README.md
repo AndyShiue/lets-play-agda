@@ -148,7 +148,18 @@ run yet.
   sets 16px for it, inside `@supports (-webkit-touch-callout: none)` (iOS only). *The scrolling behind the editor:* the
   document does not scroll (`overflow: hidden`, `overscroll-behavior: none` on `html` and `body`, also in the editor's
   page), and on a small screen with the editor open, where it covers the page, the page behind it (`#main`) does not
-  scroll either; on a wide screen, where the page is beside the editor, it does. Checked with the WebKit of
+  scroll either; on a wide screen, where the page is beside the editor, it does. *Taps:* Safari reports the click
+  that follows a finger as a mouse's (`pointerType: "mouse"`; the WebKit of Playwright does, Chrome says
+  `touch`), so the touch handling of the command bar (see above) goes by the `pointerdown` that began the tap, not
+  by the click. And iOS puts the keyboard up for an input that takes the focus in a tap, not for one that has the
+  focus already: after the reader has put the keyboard away with the key of the iPad, the editor's text input keeps
+  the focus and a tap in the editor does not bring the keyboard back. So a tap in the editor with no keyboard up
+  (`--kb-bottom` is 0) lets the focused text input go and takes it again, once (`watchEditorTaps`, iOS only: elsewhere
+  the browser does it itself and the page cannot tell whether the keyboard is up). The command bar no longer
+  cancels the `pointerdown` of a finger (the symbol bar still does): in the WebKit of Playwright a cancelled
+  `pointerdown` makes the tap lose its `mousedown` and `click`, and a command is never run. **Not understood:** the
+  same happens there for the symbol bar, whose buttons then do nothing when tapped; whether it does on an iPhone is
+  not known (they were not reported broken), and the bar is left as it was. Checked with the WebKit of
   Playwright on Windows, iPhone and iPad sizes (the page is isolated, the editor opens, Agda answers; the layout with
   a simulated visual viewport, since there is no keyboard; the end-to-end test does that with a stub in Edge). **Not
   checked on a real iPhone or iPad:** the keyboard itself, the zoom, the touch scrolling, and why the Agda panel
