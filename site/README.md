@@ -136,6 +136,23 @@ run yet.
   Windows (a thin scrollbar under both bars, the wheel moves them, the end-to-end test does it
   too) and in a touch emulation (no scrollbar); not in Safari or Firefox, and not on macOS, where the
   system may draw the scrollbar only while it is scrolled (the wheel works either way).
+* **iPhone and iPad (Safari).** Three things that Chrome does by itself and Safari does not.
+  *The keyboard:* `interactive-widget=resizes-content` in the viewport meta is ignored by Safari (WebKit says so in
+  its console), so the on-screen keyboard covers the bottom of the page, and with it the bars under the editor.
+  `fitToKeyboard` in `src/app.js` reads `visualViewport`: what is covered at the bottom (more than 40px; the bar of a
+  hardware keyboard on an iPad is some 55px) becomes `--kb-bottom`, which makes the page (`.app`) and the editor panel
+  end above the keyboard, and `--vv-top` starts the panel of a small screen where the visual viewport does when the
+  browser has moved it to show the cursor. Nothing happens while the page is zoomed in by a pinch (the visual viewport
+  is smaller then, too). *The focus zoom:* iOS zooms the page in when an input with a font below 16px gets the focus,
+  and the text input of the editor (Monaco's hidden textarea) has the editor's font size (15px); `editor/src/index.html`
+  sets 16px for it, inside `@supports (-webkit-touch-callout: none)` (iOS only). *The scrolling behind the editor:* the
+  document does not scroll (`overflow: hidden`, `overscroll-behavior: none` on `html` and `body`, also in the editor's
+  page), and on a small screen with the editor open, where it covers the page, the page behind it (`#main`) does not
+  scroll either; on a wide screen, where the page is beside the editor, it does. Checked with the WebKit of
+  Playwright on Windows, iPhone and iPad sizes (the page is isolated, the editor opens, Agda answers; the layout with
+  a simulated visual viewport, since there is no keyboard; the end-to-end test does that with a stub in Edge). **Not
+  checked on a real iPhone or iPad:** the keyboard itself, the zoom, the touch scrolling, and why the Agda panel
+  stayed empty for a reader on iOS 18 (it does not here: WebKit on Windows shows the result, in light and dark).
 * **Cross-origin isolation.** Agda's WebAssembly build needs `SharedArrayBuffer`,
   which browsers only enable for pages with `Cross-Origin-Opener-Policy` and
   `Cross-Origin-Embedder-Policy` headers. GitHub Pages cannot send them, so a

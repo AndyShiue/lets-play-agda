@@ -573,6 +573,56 @@ try {
   }
   await page.screenshot({ path: path.join(OUT, '2c-command-bar.png') });
 
+  // ---- 2f. the on-screen keyboard ----------------------------------------------
+  // Safari does not make the page smaller for the keyboard (Chrome does, see the viewport meta): the keyboard covers the
+  // bottom of the page, and with it the bars under the editor. The page reads the visual viewport. There is no keyboard
+  // here, so the visual viewport is a stub that is shrunk the way Safari does. A page of its own, on another origin (127.0.0.1:
+  // its own storage, so that it does not open the editor, and its own channel).
+  log('--- 2f. the on-screen keyboard (simulated)');
+  {
+    const kbPage = await context.newPage();
+    await kbPage.setViewportSize({ width: 700, height: 900 });
+    await kbPage.addInitScript(() => {
+      if (window !== window.top) return;
+      const vv = Object.assign(new EventTarget(), { scale: 1, offsetTop: 0, offsetLeft: 0, height: window.innerHeight, width: window.innerWidth });
+      Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+      window.__keyboard = (height, { top = 0, scale = 1 } = {}) => { vv.height = window.innerHeight - height - top; vv.offsetTop = top; vv.scale = scale; vv.dispatchEvent(new Event('resize')); };
+    });
+    await kbPage.goto(PAGE.replace('localhost', '127.0.0.1'));
+    await kbPage.waitForSelector('#exercise-1');
+    await kbPage.evaluate(() => { document.querySelector('.editor-panel').hidden = false; }); // the panel as it is with the editor open, without loading it
+    const fit = (keyboard, options) => kbPage.evaluate(async ([height, opts]) => {
+      window.__keyboard(height, opts);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const bottom = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().bottom);
+      const top = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().top);
+      return { innerHeight, app: bottom('.app'), panelTop: top('.editor-panel'), panel: bottom('.editor-panel') };
+    }, [keyboard, options]);
+    const none = await fit(0);
+    check('without a keyboard the page and the editor panel fill the window', none.app === none.innerHeight && none.panel === none.innerHeight, JSON.stringify(none));
+    const up = await fit(300);
+    check('a keyboard of 300px makes the page and the editor panel (with its bars) end above it', up.app === up.innerHeight - 300 && up.panel === up.innerHeight - 300, JSON.stringify(up));
+    const moved = await fit(300, { top: 60 });
+    check('…and the panel starts where the visual viewport does when the browser has moved it', moved.panel === moved.innerHeight - 300 && moved.panelTop === 60, JSON.stringify(moved));
+    const zoomed = await fit(300, { scale: 2 });
+    check('…but a page that is zoomed in (a pinch) is left alone', zoomed.app === zoomed.innerHeight && zoomed.panel === zoomed.innerHeight, JSON.stringify(zoomed));
+    const small = await fit(20);
+    check('…and so is a difference that is no keyboard', small.app === small.innerHeight, JSON.stringify(small));
+
+    // the editor covers the page on a small screen: nothing scrolls behind it (a drag that nothing uses must not move the page, as in
+    // Safari on iOS); on a wide screen the page is beside the editor and scrolls as always
+    await kbPage.evaluate(() => document.querySelector('.app').classList.add('editor-open'));
+    const lock = await kbPage.evaluate(() => ({
+      document: getComputedStyle(document.documentElement).overflowY, bounce: getComputedStyle(document.documentElement).overscrollBehaviorY,
+      page: getComputedStyle(document.querySelector('#main')).overflowY,
+    }));
+    check('on a small screen, with the editor open, neither the document nor the page behind the editor scrolls', lock.document === 'hidden' && lock.bounce === 'none' && lock.page === 'hidden', JSON.stringify(lock));
+    await kbPage.setViewportSize({ width: 1100, height: 900 });
+    const wide = await kbPage.evaluate(() => getComputedStyle(document.querySelector('#main')).overflowY);
+    check('…and on a wide screen, where the page is beside the editor, the page scrolls', wide === 'auto', wide);
+    await kbPage.close();
+  }
+
   // ---- 3. solve -----------------------------------------------------------
   log('--- 3. solve it');
   await fillHole(page);

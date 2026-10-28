@@ -21,9 +21,15 @@
     }
   </script>
   <style>
-    html, body { height: 100%; margin: 0; }
+    /* overscroll-behavior: a drag that the editor does not use must not move the page around this frame (Safari on iOS) */
+    html, body { height: 100%; margin: 0; overscroll-behavior: none; }
     #lpa-status { font: 16px/1.5 system-ui, sans-serif; padding: 2rem; color: #888; }
     #lpa-status.error { color: #b00020; white-space: pre-wrap; }
+    /* iOS zooms the page in when an input with a font below 16px gets the focus, and the text input of the editor (the
+       hidden textarea of Monaco, in the size of the editor's font) is one. -webkit-touch-callout exists on iOS only. */
+    @supports (-webkit-touch-callout: none) {
+      .monaco-editor textarea.inputarea { font-size: 16px !important; }
+    }
   </style>
 </head>
 <body aria-label="">

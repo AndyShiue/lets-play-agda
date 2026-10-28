@@ -54,7 +54,9 @@
 }
 
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+/* The document itself never scrolls: #main (and the sidebar and the editor) do, inside the page. Without this Safari on iOS lets
+   a drag that a scroller does not use move the whole page (a bounce, the toolbar) behind a fixed editor panel. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.65 var(--font); -webkit-text-size-adjust: 100%; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -66,7 +68,8 @@ button { font: inherit; color: inherit; }
   display: grid;
   grid-template-columns: var(--nav-w) minmax(0, 1fr) var(--editor-w);
   grid-template-rows: var(--topbar-h) minmax(0, 1fr);
-  height: 100vh; height: 100dvh;
+  /* --kb-bottom: the height of the on-screen keyboard where it covers the page (Safari does not resize the page for it: see fitToKeyboard in app.js) */
+  height: calc(100vh - var(--kb-bottom, 0px)); height: calc(100dvh - var(--kb-bottom, 0px));
 }
 .topbar {
   grid-column: 1 / -1; display: flex; align-items: center; gap: .5rem; padding: 0 .75rem;
@@ -279,7 +282,8 @@ details.solution > summary { cursor: pointer; padding: .2rem 0; }
   .app.nav-open .sidebar { transform: none; box-shadow: 0 0 30px rgb(0 0 0 / .3); }
   #main { grid-column: 1; }
   .app.editor-open { --editor-w: 0px; }
-  .editor-panel { position: fixed; z-index: 30; inset: var(--topbar-h) 0 0 0; border-left: 0; }
+  .app.editor-open #main { overflow: hidden; } /* the editor covers the page: no scrolling of it behind the editor (it keeps its place) */
+  .editor-panel { position: fixed; z-index: 30; inset: max(var(--topbar-h), var(--vv-top, 0px)) 0 var(--kb-bottom, 0px) 0; border-left: 0; }
   .editor-resizer { display: none; }
   #content { padding: 1rem 1rem 3rem; }
   .brand-name { display: none; }
@@ -287,7 +291,7 @@ details.solution > summary { cursor: pointer; padding: .2rem 0; }
   #search-results { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) { #main { scroll-behavior: auto; } .sidebar { transition: none; } }
-@media print { .topbar, .sidebar, .editor-panel, .pager, .copy-btn { display: none !important; } .app { display: block; height: auto; } #main { overflow: visible; } }
+@media print { .topbar, .sidebar, .editor-panel, .pager, .copy-btn { display: none !important; } html, body { height: auto; overflow: visible; } .app { display: block; height: auto; } #main { overflow: visible; } }
 
 .toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translate(-50%, 1rem); opacity: 0; transition: .3s; background: var(--bg-soft); color: var(--fg); border: 1px solid var(--line); padding: .6rem 1.1rem; border-radius: .6rem; z-index: 110; font-size: .95rem; box-shadow: 0 6px 24px rgb(0 0 0 / .3); }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }

@@ -815,6 +815,26 @@
   const savedWidth = Number(store.get('lpa:editor-size'));
   if (savedWidth) app.style.setProperty('--editor-size', Math.min(savedWidth, innerWidth - 360) + 'px');
 
+  // The on-screen keyboard. Chrome makes the page smaller for it (interactive-widget=resizes-content in the viewport
+  // meta); Safari does not: the keyboard covers the bottom of the page, and with it the bars under the editor. What is
+  // left above the keyboard is the visual viewport: the page is made as high as that (--kb-bottom, see app.css), and the
+  // panel of a small screen starts where the visual viewport does when the browser has moved it to show the cursor
+  // (--vv-top). Nothing happens while the page is zoomed in: a pinch makes the visual viewport smaller, too.
+  const viewport = window.visualViewport;
+  function fitToKeyboard() {
+    const zoomed = Math.abs(viewport.scale - 1) > 0.01;
+    const covered = zoomed ? 0 : Math.round(window.innerHeight - viewport.offsetTop - viewport.height);
+    const keyboard = covered > 40 ? covered : 0; // the bar of a hardware keyboard on an iPad is some 55px; a smaller difference is no keyboard
+    const root = document.documentElement.style;
+    root.setProperty('--kb-bottom', `${keyboard}px`);
+    root.setProperty('--vv-top', `${keyboard ? Math.round(viewport.offsetTop) : 0}px`);
+  }
+  if (viewport) {
+    viewport.addEventListener('resize', fitToKeyboard);
+    viewport.addEventListener('scroll', fitToKeyboard);
+    fitToKeyboard();
+  }
+
   // ---------------------------------------------------------------------------
   // service worker
   // ---------------------------------------------------------------------------
